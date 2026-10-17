@@ -1,5 +1,8 @@
-// 🌐 ご自身の Cloudflare Workers の URL に書き換えてください
+// 🌐 Cloudflare Workers の URL
 const PROXY_WORKER_URL = "https://material-proxy.tutchimikadoseimei.workers.dev/?url=";
+
+// 🌐 スプレッドシート（GAS）の Web App URL（★ご自身のURLに書き換えてください）
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxuB6Ps7mBo-Szy2VyOLSqXem0Y38VUFousaF69GinBEBeMrCq6zwz-ngh02fcF5Kmzdw/exec";
 
 let allMaterials = [];
 let currentPlayingUrl = "";
@@ -12,8 +15,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function initApp() {
     try {
-        const response = await fetch("materials.json");
-        if (!response.ok) throw new Error("データの読み込みに失敗しました。");
+        // まずGAS（スプレッドシート）から最新データを動的に取得
+        let response = await fetch(GAS_API_URL);
+        
+        // エラーや通信失敗時はローカルの materials.json に安全にフォールバック
+        if (!response.ok) {
+            console.warn("GASからの取得に失敗したため、ローカルJSONを使用します。");
+            response = await fetch("materials.json");
+        }
         
         allMaterials = await response.json();
 
@@ -35,6 +44,7 @@ async function initApp() {
     }
 }
 
+// 🛡️ Discord直リンクをCloudflare Worker経由に隠蔽・変換する関数
 function getProxiedUrl(originalDiscordUrl) {
     if (!originalDiscordUrl) return '#';
     if (originalDiscordUrl.startsWith('http')) {
@@ -210,10 +220,8 @@ function renderCategoryList(materials, container) {
     }
 
     const filtered = materials.filter(item => {
-        // カテゴリが一致するか
         if (targetCategory && item.category !== targetCategory) return false;
 
-        // typeが指定されている場合、データにtypeがなくてもカテゴリ名から自動推論して柔軟に判定
         if (targetType) {
             const isBgCategory = item.category && (
                 item.category.includes('学校') || item.category.includes('日常') || 
