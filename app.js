@@ -1,5 +1,5 @@
 const PROXY_WORKER_URL = "https://material-proxy.tutchimikadoseimei.workers.dev/?url=";
-const GAS_API_URL = "YOUR_GAS_WEB_APP_URL"; // ★ご自身のGAS URLに書き換えてください
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxuB6Ps7mBo-Szy2VyOLSqXem0Y38VUFousaF69GinBEBeMrCq6zwz-ngh02fcF5Kmzdw/exec"; // ★ご自身のGAS URLに書き換えてください
 
 let allMaterials = [];
 let allCategories = [];
