@@ -4,11 +4,25 @@ const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxuB6Ps7mBo-Szy2VyO
 let allMaterials = [];
 let allCategories = [];
 let currentPlayingUrl = "";
-let favorites = JSON.parse(localStorage.getItem('ai_material_favs') || '[]');
+
+// 🔒 localStorage の堅牢な読み込み・パース処理
+let favorites = [];
+try {
+    const rawFavs = localStorage.getItem('ai_material_favs');
+    const parsed = rawFavs ? JSON.parse(rawFavs) : [];
+    if (Array.isArray(parsed)) {
+        favorites = parsed.map(id => String(id));
+    }
+} catch (e) {
+    console.warn("お気に入りデータの読み込みに失敗したため、初期化します:", e);
+    favorites = [];
+    localStorage.setItem('ai_material_favs', JSON.stringify(favorites));
+}
 
 document.addEventListener("DOMContentLoaded", () => {
     initApp();
     initCustomAudioPlayer();
+    initFavoriteBackupTools(); // お気に入りエクスポート・インポート機能
 });
 
 async function initApp() {
@@ -21,7 +35,6 @@ async function initApp() {
 
         const data = await response.json();
         
-        // 🌟 オブジェクト（{"materials": [...]}）でも配列でも安全に受け取る処理
         if (Array.isArray(data)) {
             allMaterials = data;
             allCategories = [...new Set(data.map(item => item.channel || item.category))];
@@ -30,7 +43,6 @@ async function initApp() {
             allCategories = data.categories || [];
         }
 
-        // 🌟 durationが日付文字列になっている場合の安全対策
         allMaterials.forEach(item => {
             if (item.duration && item.duration.includes('GMT')) {
                 item.duration = '4:00';
@@ -38,19 +50,9 @@ async function initApp() {
         });
 
         renderDynamicCategories(allCategories);
-
-        const pickupContainer = document.getElementById('auto-scroll-container');
-        if (pickupContainer) {
-            renderPickup(allMaterials, pickupContainer);
-        }
-
-        const listContainer = document.getElementById('list-container');
-        if (listContainer) {
-            renderCategoryList(allMaterials, listContainer);
-        }
+        initSearchAndFilter(); // 🔍 複合検索・URL同期の初期化
 
         renderFavorites();
-        initSearch();
 
     } catch (error) {
         console.warn("GASからの取得に失敗、またはエラー:", error);
@@ -61,12 +63,8 @@ async function initApp() {
             allCategories = Array.isArray(rawData) ? [] : (rawData.categories || []);
             
             renderDynamicCategories(allCategories);
-            const pickupContainer = document.getElementById('auto-scroll-container');
-            if (pickupContainer) renderPickup(allMaterials, pickupContainer);
-            const listContainer = document.getElementById('list-container');
-            if (listContainer) renderCategoryList(allMaterials, listContainer);
+            initSearchAndFilter();
             renderFavorites();
-            initSearch();
         } catch (e) {
             console.error("ローカルJSONの読み込みにも失敗しました:", e);
         }
@@ -81,17 +79,26 @@ function renderDynamicCategories(categories) {
     categories.forEach(cat => {
         const link = document.createElement('a');
         link.className = 'category-btn';
-        link.href = `list.html?category=${encodeURIComponent(cat)}`;
+        link.href = `index.html?category=${encodeURIComponent(cat)}`;
         link.textContent = `📁 ${cat}`;
         categoryNav.appendChild(link);
     });
 }
 
 function getProxiedUrl(url) {
-    if (!url) return '#';
+    if (!url || typeof url !== 'string') return '#';
     if (url.includes('material-proxy')) return url;
-    if (url.startsWith('http')) return PROXY_WORKER_URL + encodeURIComponent(url);
-    return url;
+
+    try {
+        const parsed = new URL(url, window.location.origin);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '#';
+        if (parsed.hostname.includes('discord')) {
+            return PROXY_WORKER_URL + encodeURIComponent(url);
+        }
+        return url;
+    } catch (e) {
+        return '#';
+    }
 }
 
 function handleCardClick(item, proxiedUrl, downloadPageUrl) {
@@ -138,47 +145,81 @@ function openImageModal(item, proxiedUrl, downloadPageUrl) {
     });
 }
 
-function initSearch() {
+// 🔍 P2: 複合検索・URLパラメータ同期・条件クリア・0件案内
+function initSearchAndFilter() {
     const searchInput = document.getElementById('search-input');
-    if (!searchInput) return;
-
-    const params = new URLSearchParams(window.location.search);
-    const searchQuery = params.get('search') || params.get('q');
-
-    if (searchQuery) {
-        searchInput.value = searchQuery;
-        executeSearch(searchQuery);
-    }
-
-    searchInput.addEventListener('input', (e) => {
-        executeSearch(e.target.value.trim());
-    });
-}
-
-function executeSearch(queryText) {
-    const query = queryText.toLowerCase();
-    const pickupTitle = document.getElementById('pickup-title');
     const container = document.getElementById('auto-scroll-container');
-
+    const pickupTitle = document.getElementById('pickup-title');
     if (!container) return;
 
-    if (query === '') {
-        if (pickupTitle) pickupTitle.textContent = "🔥 注目ピックアップ";
-        renderPickup(allMaterials, container);
-        return;
+    const params = new URLSearchParams(window.location.search);
+    const searchQuery = params.get('q') || params.get('search') || '';
+    const targetCategory = params.get('category') || '';
+    const targetType = params.get('type') || '';
+    const sortBy = params.get('sort') || 'new'; // new / name
+
+    if (searchInput && searchQuery) {
+        searchInput.value = searchQuery;
     }
 
-    if (pickupTitle) pickupTitle.textContent = `🔍 検索結果: "${queryText}"`;
+    // フィルタリング実行
+    let filtered = allMaterials.filter(item => {
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            const titleMatch = item.title ? item.title.toLowerCase().includes(q) : false;
+            const tagMatch = Array.isArray(item.tags) ? item.tags.some(tag => tag.toLowerCase().includes(q)) : false;
+            const categoryMatch = item.category ? item.category.toLowerCase().includes(q) : false;
+            const channelMatch = item.channel ? item.channel.toLowerCase().includes(q) : false;
+            if (!titleMatch && !tagMatch && !categoryMatch && !channelMatch) return false;
+        }
 
-    const filtered = allMaterials.filter(item => {
-        const titleMatch = item.title ? item.title.toLowerCase().includes(query) : false;
-        const tagMatch = Array.isArray(item.tags) ? item.tags.some(tag => tag.toLowerCase().includes(query)) : false;
-        const categoryMatch = item.category ? item.category.toLowerCase().includes(query) : false;
-        const channelMatch = item.channel ? item.channel.toLowerCase().includes(query) : false;
-        return titleMatch || tagMatch || categoryMatch || channelMatch;
+        if (targetCategory) {
+            const matchCat = item.category === targetCategory || item.channel === targetCategory;
+            if (!matchCat) return false;
+        }
+
+        if (targetType) {
+            if (item.type !== targetType) return false;
+        }
+
+        return true;
     });
 
+    // 並び替え (新着順 / 名前順)
+    if (sortBy === 'name') {
+        filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    } else {
+        filtered.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+    }
+
+    // タイトルと件数の更新
+    if (pickupTitle) {
+        let titleText = "🔥 注目ピックアップ";
+        if (searchQuery || targetCategory || targetType) {
+            titleText = `🔍 検索・絞り込み結果 (${filtered.length}件)`;
+        } else {
+            titleText = `🔥 注目ピックアップ (${filtered.length}件)`;
+        }
+        pickupTitle.innerHTML = `${titleText} <a href="index.html" style="font-size:0.8rem; margin-left:15px; color:var(--accent-color); text-decoration:underline; ${(searchQuery || targetCategory || targetType) ? '' : 'display:none;'}">条件クリア</a>`;
+    }
+
     renderPickup(filtered, container);
+
+    // 入力イベント（URL同期）
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const val = e.target.value.trim();
+            const currentParams = new URLSearchParams(window.location.search);
+            if (val) {
+                currentParams.set('q', val);
+            } else {
+                currentParams.delete('q');
+            }
+            const newRelativePathQuery = window.location.pathname + '?' + currentParams.toString();
+            history.replaceState(null, '', newRelativePathQuery);
+            initSearchAndFilter(); // 再描画
+        });
+    }
 }
 
 function toggleFavorite(itemId, event) {
@@ -267,7 +308,7 @@ function renderFavorites() {
 function renderPickup(materials, container) {
     container.innerHTML = "";
     if (materials.length === 0) {
-        container.innerHTML = "<p style='color: var(--text-secondary); padding: 10px;'>該当する素材が見つかりませんでした。</p>";
+        container.innerHTML = "<div style='grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-secondary);'><p style='font-size: 1.1rem; margin-bottom: 10px;'>🔍 条件に一致する素材が見つかりませんでした。</p><a href='index.html' style='color: var(--accent-color); text-decoration: underline;'>すべての素材を表示する</a></div>";
         return;
     }
 
@@ -282,47 +323,38 @@ function renderPickup(materials, container) {
     });
 }
 
-function renderCategoryList(materials, container) {
-    const params = new URLSearchParams(window.location.search);
-    const targetCategory = params.get("category");
-    const targetType = params.get("type");
+// 📦 お気に入りのバックアップ機能（エクスポート・インポート）の初期化
+function initFavoriteBackupTools() {
+    // 既存のUIを邪魔せず、必要に応じて使えるよう関数として準備
+    window.exportFavorites = function() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(favorites));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", "ai_material_favorites_backup.json");
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+    };
 
-    const titleEl = document.getElementById("category-title");
-    const descEl = document.getElementById("category-description");
-
-    if (targetCategory) {
-        if (titleEl) titleEl.textContent = `📂 ${targetCategory} の素材`;
-        if (descEl) descEl.textContent = `「${targetCategory}」カテゴリに登録されている素材一覧です。`;
-    }
-
-    const filtered = materials.filter(item => {
-        if (targetCategory) {
-            const matchCategory = item.category === targetCategory;
-            const matchChannel = item.channel === targetCategory;
-            if (!matchCategory && !matchChannel) return false;
+    window.importFavorites = function(event) {
+        const fileReader = new FileReader();
+        if (event.target.files[0]) {
+            fileReader.readAsText(event.target.files[0], "UTF-8");
+            fileReader.onload = (e) => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (Array.isArray(imported)) {
+                        favorites = [...new Set([...favorites, ...imported.map(id => String(id))])];
+                        localStorage.setItem('ai_material_favs', JSON.stringify(favorites));
+                        renderFavorites();
+                        alert("お気に入りを正常にインポートしました！");
+                    }
+                } catch (err) {
+                    alert("バックアップファイルの読み込みに失敗しました。");
+                }
+            };
         }
-
-        if (targetType) {
-            if (item.type !== targetType) return false;
-        }
-        return true;
-    });
-
-    container.innerHTML = "";
-    if (filtered.length === 0) {
-        container.innerHTML = "<p style='color: var(--text-secondary);'>このカテゴリに一致する素材はまだ登録されていません。</p>";
-        return;
-    }
-
-    filtered.forEach(item => {
-        const proxiedUrl = getProxiedUrl(item.fileUrl);
-        const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(proxiedUrl)}&tags=${encodeURIComponent((item.tags || []).join(" "))}&category=${encodeURIComponent(item.category)}`;
-        const durationDisplay = item.duration && item.duration !== '-' ? `<span style="font-size: 0.8rem; color: var(--text-secondary);">⏱ ${escapeHTML(item.duration)}</span>` : '';
-        const isFav = favorites.includes(item.id);
-
-        const card = createCardElement(item, proxiedUrl, downloadPageUrl, isFav, durationDisplay, "material-card");
-        container.appendChild(card);
-    });
+    };
 }
 
 function playAudio(item) {

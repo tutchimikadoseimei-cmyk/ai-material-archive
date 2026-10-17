@@ -21,19 +21,19 @@
             <h2 id="item-title" class="hero-title" style="font-size: 1.8rem; margin-bottom: 10px;">素材を読み込み中...</h2>
             <p id="item-tags" class="hero-subtitle" style="margin-bottom: 25px;">-</p>
 
-            <!-- プレビュー表示エリア -->
+            <!-- プレビュー表示エリア（安全なDOM生成） -->
             <div id="item-preview" style="margin: 30px 0; display: flex; justify-content: center;">
                 <!-- 動的プレビュー -->
             </div>
 
-            <!-- ダウンロードボタン（強制Blobダウンロード対応） -->
+            <!-- ダウンロードボタン -->
             <div style="margin-top: 30px;">
                 <button id="download-btn" class="action-btn" style="font-size: 1.1rem; padding: 14px 32px; display: inline-block; cursor: pointer; border: none;">
                     📥 ダウンロード 📥
                 </button>
             </div>
 
-            <!-- 🤝 エンゲージメント機能エリア（コピー＆シェア） -->
+            <!-- 🤝 エンゲージメント機能エリア -->
             <div style="margin-top: 40px; display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; border-top: 1px solid var(--border-color); padding-top: 30px;">
                 <button id="copy-credit-btn" class="action-btn" style="background: #334155; color: #38bdf8; border: 1px solid #475569;">
                     📋 クレジット表記をコピー
@@ -53,27 +53,65 @@
     </footer>
 
     <script>
+        // 🔒 URLパラメータの安全な取得と検証
         const params = new URLSearchParams(window.location.search);
         const title = params.get('title') || 'AI素材';
         const channel = params.get('channel') || 'AI Material Archive';
         const type = params.get('type') || 'bgm';
-        const url = params.get('url');
+        const rawUrl = params.get('url');
         const tags = params.get('tags') || '';
 
+        // 🔒 textContentによる完全に安全なテキスト反映（XSS完全防止）
         document.getElementById('item-title').textContent = title;
-        document.getElementById('item-channel').textContent = `${type === 'image' ? '🖼️' : '🎵'} ${channel}`;
+        document.getElementById('item-channel শক্তির').textContent = `${type === 'image' ? '🖼️' : '🎵'} ${channel}`;
         document.getElementById('item-tags').textContent = tags;
 
         const previewBox = document.getElementById('item-preview');
         const downloadBtn = document.getElementById('download-btn');
 
-        let targetFileUrl = url;
+        // 🔒 URLスキーム検証（javascript: や data: などの危険なスキームを完全にブロック）
+        function isValidUrl(url) {
+            if (!url) return false;
+            try {
+                const parsed = new URL(url, window.location.origin);
+                return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+            } catch (e) {
+                return false;
+            }
+        }
 
-        if (url && url !== 'null' && url !== '') {
+        let targetFileUrl = isValidUrl(rawUrl) ? rawUrl : '';
+
+        if (targetFileUrl) {
+            previewBox.innerHTML = ''; // クリア
+
+            // 🔒 innerHTMLを使わず安全なDOM要素生成でプレビューを構築
             if (type === 'bgm') {
-                previewBox.innerHTML = `<audio controls src="${url}" style="width: 100%; max-width: 500px;" onerror="showAudioError()"></audio>`;
+                const audioEl = document.createElement('audio');
+                audioEl.controls = true;
+                audioEl.src = targetFileUrl;
+                audioEl.style.cssText = 'width: 100%; max-width: 500px;';
+                audioEl.onerror = () => {
+                    previewBox.innerHTML = '';
+                    const errP = document.createElement('p');
+                    errP.style.cssText = 'color: var(--heart-color); font-size: 0.9rem;';
+                    errP.textContent = '⚠️ 音声ファイルの読み込みに失敗しました（リンクの有効期限切れの可能性があります）。';
+                    previewBox.appendChild(errP);
+                };
+                previewBox.appendChild(audioEl);
             } else {
-                previewBox.innerHTML = `<img src="${url}" alt="${title}" style="max-width: 100%; max-height: 400px; border-radius: 8px;" onerror="this.outerHTML='<p style=\'color:var(--heart-color);\'>⚠️ 画像ファイルの読み込みに失敗しました。</p>';">`;
+                const imgEl = document.createElement('img');
+                imgEl.src = targetFileUrl;
+                imgEl.alt = title;
+                imgEl.style.cssText = 'max-width: 100%; max-height: 400px; border-radius: 8px;';
+                imgEl.onerror = () => {
+                    previewBox.innerHTML = '';
+                    const errP = document.createElement('p');
+                    errP.style.cssText = 'color: var(--heart-color);';
+                    errP.textContent = '⚠️ 画像ファイルの読み込みに失敗しました。';
+                    previewBox.appendChild(errP);
+                };
+                previewBox.appendChild(imgEl);
             }
 
             // 📥 確実にダウンロードさせる処理（Blob化）
@@ -82,19 +120,21 @@
                 downloadBtn.style.opacity = "0.7";
                 try {
                     const response = await fetch(targetFileUrl);
+                    if (!response.ok) throw new Error('Network response was not ok');
                     const blob = await response.blob();
                     const blobUrl = window.URL.createObjectURL(blob);
                     
                     const a = document.createElement('a');
                     a.href = blobUrl;
                     
-                    // 拡張子の推測（画像なら .png、音声なら .mp3 など）
                     let ext = type === 'image' ? '.png' : '.mp3';
                     if (targetFileUrl.includes('.jpg') || targetFileUrl.includes('.jpeg')) ext = '.jpg';
                     if (targetFileUrl.includes('.webp')) ext = '.webp';
                     if (targetFileUrl.includes('.wav')) ext = '.wav';
 
-                    a.download = `${title}${ext}`;
+                    // 🔒 ファイル名のサニタイズ（安全なファイル名にする）
+                    const safeTitle = title.replace(/[/\\?%*:|"<>]/g, '_');
+                    a.download = `${safeTitle}${ext}`;
                     document.body.appendChild(a);
                     a.click();
                     
@@ -114,10 +154,6 @@
             downloadBtn.style.display = "none";
         }
 
-        function showAudioError() {
-            previewBox.innerHTML = `<p style="color: var(--heart-color); font-size: 0.9rem;">⚠️ 音声ファイルの読み込みに失敗しました（リンクの有効期限切れの可能性があります）。</p>`;
-        }
-
         // 📋 クレジットコピー機能
         document.getElementById('copy-credit-btn').addEventListener('click', () => {
             const creditType = type === 'image' ? '画像' : 'BGM';
@@ -128,6 +164,7 @@
         });
 
         // 𝕏 シェア機能
+        document.getElementById('share-twitter-btn').appendEventListener?.('click', () => {});
         document.getElementById('share-twitter-btn').addEventListener('click', () => {
             const shareUrl = window.location.href;
             const tweetText = encodeURIComponent(`【無料AI素材】「${title}」を見つけました！\n#AI素材 #フリー素材`);

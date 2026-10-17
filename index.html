@@ -4,6 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Material Archive | クリエイター向け無料素材ライブラリ</title>
+    <meta name="description" content="Discordホストの商用利用OK・登録不要のフリーAI素材（BGM・背景画像）ギャラリーサイト。ゲーム制作や動画配信に最適。">
+
+    <!-- 🚀 パフォーマンス改善：CDNへの事前接続（preconnect）で読み込みのワンテンポを解消 -->
+    <link rel="preconnect" href="https://cdn.discordapp.com">
+    <link rel="preconnect" href="https://media.discordapp.net">
+    <link rel="preconnect" href="https://material-proxy.tutchimikadoseimei.workers.dev">
+
+    <!-- OGP / SNSシェア最適化 -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://tutchimikadoseimei-cmyk.github.io/ai-material-archive/">
+    <meta property="og:title" content="AI Material Archive | クリエイター向け無料素材ライブラリ">
+    <meta property="og:description" content="商用利用OK・登録不要のフリーAI素材（BGM・背景画像）ギャラリー。">
+    <meta name="twitter:card" content="summary_large_image">
+
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -240,7 +254,7 @@
         </div>
 
         <!-- 非表示の音声エンジン -->
-        <audio id="hidden-audio"></audio>
+        <audio id="hidden-audio" preload="none"></audio>
     </div>
 
     <script src="app.js"></script>
