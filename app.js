@@ -16,21 +16,26 @@ async function initApp() {
         let response = await fetch(GAS_API_URL);
         
         if (!response.ok) {
-            console.warn("GASからの取得に失敗したため、ローカルJSONを使用します。");
-            response = await fetch("materials.json");
-            const rawData = await response.json();
-            allMaterials = Array.isArray(rawData) ? rawData : (rawData.materials || []);
-            allCategories = Array.isArray(rawData) ? [] : (rawData.categories || []);
-        } else {
-            const data = await response.json();
-            if (Array.isArray(data)) {
-                allMaterials = data;
-                allCategories = [...new Set(data.map(item => item.channel || item.category))];
-            } else {
-                allMaterials = data.materials || [];
-                allCategories = data.categories || [];
-            }
+            throw new Error("GASからの取得に失敗しました");
         }
+
+        const data = await response.json();
+        
+        // 🌟 オブジェクト（{"materials": [...]}）でも配列でも安全に受け取る処理
+        if (Array.isArray(data)) {
+            allMaterials = data;
+            allCategories = [...new Set(data.map(item => item.channel || item.category))];
+        } else {
+            allMaterials = data.materials || [];
+            allCategories = data.categories || [];
+        }
+
+        // 🌟 durationが日付文字列になっている場合の安全対策
+        allMaterials.forEach(item => {
+            if (item.duration && item.duration.includes('GMT')) {
+                item.duration = '4:00'; // または適切な長さにフォールバック
+            }
+        });
 
         renderDynamicCategories(allCategories);
 
@@ -48,7 +53,24 @@ async function initApp() {
         initSearch();
 
     } catch (error) {
-        console.error("エラー:", error);
+        console.warn("GASからの取得に失敗、またはエラー:", error);
+        // フォールバックとしてローカルJSONを試す場合
+        try {
+            let resLocal = await fetch("materials.json");
+            let rawData = await resLocal.json();
+            allMaterials = Array.isArray(rawData) ? rawData : (rawData.materials || []);
+            allCategories = Array.isArray(rawData) ? [] : (rawData.categories || []);
+            
+            renderDynamicCategories(allCategories);
+            const pickupContainer = document.getElementById('auto-scroll-container');
+            if (pickupContainer) renderPickup(allMaterials, pickupContainer);
+            const listContainer = document.getElementById('list-container');
+            if (listContainer) renderCategoryList(allMaterials, listContainer);
+            renderFavorites();
+            initSearch();
+        } catch (e) {
+            console.error("ローカルJSONの読み込みにも失敗しました:", e);
+        }
     }
 }
 
