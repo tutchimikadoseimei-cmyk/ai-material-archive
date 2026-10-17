@@ -1,7 +1,8 @@
 const PROXY_WORKER_URL = "https://material-proxy.tutchimikadoseimei.workers.dev/?url=";
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxuB6Ps7mBo-Szy2VyOLSqXem0Y38VUFousaF69GinBEBeMrCq6zwz-ngh02fcF5Kmzdw/exec"; // ★ご自身のGAS URLに書き換えてください
+const GAS_API_URL = "YOUR_GAS_WEB_APP_URL"; // ★ご自身のGAS URLに書き換えてください
 
 let allMaterials = [];
+let allCategories = [];
 let currentPlayingUrl = "";
 let favorites = JSON.parse(localStorage.getItem('ai_material_favs') || '[]');
 
@@ -17,9 +18,21 @@ async function initApp() {
         if (!response.ok) {
             console.warn("GASからの取得に失敗したため、ローカルJSONを使用します。");
             response = await fetch("materials.json");
+            const rawData = await response.json();
+            allMaterials = Array.isArray(rawData) ? rawData : (rawData.materials || []);
+            allCategories = Array.isArray(rawData) ? [] : (rawData.categories || []);
+        } else {
+            const data = await response.json();
+            if (Array.isArray(data)) {
+                allMaterials = data;
+                allCategories = [...new Set(data.map(item => item.channel || item.category))];
+            } else {
+                allMaterials = data.materials || [];
+                allCategories = data.categories || [];
+            }
         }
-        
-        allMaterials = await response.json();
+
+        renderDynamicCategories(allCategories);
 
         const pickupContainer = document.getElementById('auto-scroll-container');
         if (pickupContainer) {
@@ -39,10 +52,24 @@ async function initApp() {
     }
 }
 
+function renderDynamicCategories(categories) {
+    const categoryNav = document.getElementById('dynamic-category-nav');
+    if (!categoryNav) return;
+
+    categoryNav.innerHTML = "";
+    categories.forEach(cat => {
+        const link = document.createElement('a');
+        link.className = 'category-btn';
+        link.href = `list.html?category=${encodeURIComponent(cat)}`;
+        link.textContent = `📁 ${cat}`;
+        categoryNav.appendChild(link);
+    });
+}
+
 function getProxiedUrl(url) {
     if (!url) return '#';
     if (url.includes('material-proxy')) {
-        return url; // すでにGAS側でラップされていればそのまま返す
+        return url;
     }
     if (url.startsWith('http')) {
         return PROXY_WORKER_URL + encodeURIComponent(url);
@@ -83,8 +110,8 @@ function executeSearch(queryText) {
     if (pickupTitle) pickupTitle.textContent = `🔍 検索結果: "${queryText}"`;
 
     const filtered = allMaterials.filter(item => {
-        const titleMatch = item.title.toLowerCase().includes(query);
-        const tagMatch = item.tags.some(tag => tag.toLowerCase().includes(query));
+        const titleMatch = item.title ? item.title.toLowerCase().includes(query) : false;
+        const tagMatch = Array.isArray(item.tags) ? item.tags.some(tag => tag.toLowerCase().includes(query)) : false;
         const categoryMatch = item.category ? item.category.toLowerCase().includes(query) : false;
         const channelMatch = item.channel ? item.channel.toLowerCase().includes(query) : false;
         
@@ -120,7 +147,7 @@ function renderFavorites() {
     const favItems = allMaterials.filter(item => favorites.includes(item.id));
 
     if (favItems.length === 0) {
-        container.innerHTML = "<p style='color: var(--text-secondary); padding: 10px;'>お気に入りに追加された素材はまだありません。ハートマークを押して保存してみましょう！</p>";
+        container.innerHTML = "<p style='color: var(--text-secondary); padding: 10px;'>お気に入りに追加された素材はまだありません。</p>";
         return;
     }
 
@@ -130,30 +157,34 @@ function renderFavorites() {
         card.className = "scroll-card";
 
         const proxiedUrl = getProxiedUrl(item.fileUrl);
-        const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(proxiedUrl)}&tags=${encodeURIComponent(item.tags.join(" "))}&category=${encodeURIComponent(item.category)}`;
+        const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(proxiedUrl)}&tags=${encodeURIComponent((item.tags || []).join(" "))}&category=${encodeURIComponent(item.category)}`;
 
-        const durationDisplay = item.duration ? `<span style="font-size: 0.75rem; color: var(--text-secondary);">⏱ ${escapeHTML(item.duration)}</span>` : '';
+        const durationDisplay = item.duration && item.duration !== '-' ? `<span style="font-size: 0.75rem; color: var(--text-secondary);">⏱ ${escapeHTML(item.duration)}</span>` : '';
 
         card.innerHTML = `
             <div>
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span class="card-header-tag">🎵 ${escapeHTML(item.channel)}</span>
+                    <span class="card-header-tag">${item.type === 'image' ? '🖼️' : '🎵'} ${escapeHTML(item.channel)}</span>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         ${durationDisplay}
                         <button class="fav-btn active" data-id="${item.id}" onclick="toggleFavorite('${item.id}', event)" title="お気に入り解除">❤️</button>
                     </div>
                 </div>
                 <h4 class="material-title">${escapeHTML(item.title)}</h4>
-                <p class="material-tags">${escapeHTML(item.tags.join(" "))}</p>
+                <p class="material-tags">${escapeHTML((item.tags || []).join(" "))}</p>
             </div>
             <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.8rem; color: var(--accent-color);">▶ 試聴する</span>
+                <span style="font-size: 0.8rem; color: var(--accent-color);">${item.type === 'image' ? '🔍 表示' : '▶ 試聴する'}</span>
                 <a href="${downloadPageUrl}" class="action-btn" style="padding: 6px 12px; font-size: 0.75rem; text-decoration:none;" onclick="event.stopPropagation();">ダウンロード</a>
             </div>
         `;
 
         card.addEventListener("click", () => {
-            playAudio({ ...item, fileUrl: proxiedUrl });
+            if (item.type === 'image') {
+                window.location.href = downloadPageUrl;
+            } else {
+                playAudio({ ...item, fileUrl: proxiedUrl });
+            }
         });
 
         container.appendChild(card);
@@ -172,31 +203,35 @@ function renderPickup(materials, container) {
         card.className = "scroll-card";
 
         const proxiedUrl = getProxiedUrl(item.fileUrl);
-        const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(proxiedUrl)}&tags=${encodeURIComponent(item.tags.join(" "))}&category=${encodeURIComponent(item.category)}`;
+        const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(proxiedUrl)}&tags=${encodeURIComponent((item.tags || []).join(" "))}&category=${encodeURIComponent(item.category)}`;
 
-        const durationDisplay = item.duration ? `<span style="font-size: 0.75rem; color: var(--text-secondary);">⏱ ${escapeHTML(item.duration)}</span>` : '';
+        const durationDisplay = item.duration && item.duration !== '-' ? `<span style="font-size: 0.75rem; color: var(--text-secondary);">⏱ ${escapeHTML(item.duration)}</span>` : '';
         const isFav = favorites.includes(item.id);
 
         card.innerHTML = `
             <div>
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span class="card-header-tag">🎵 ${escapeHTML(item.channel)}</span>
+                    <span class="card-header-tag">${item.type === 'image' ? '🖼️' : '🎵'} ${escapeHTML(item.channel)}</span>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         ${durationDisplay}
                         <button class="fav-btn ${isFav ? 'active' : ''}" data-id="${item.id}" onclick="toggleFavorite('${item.id}', event)" title="お気に入り">${isFav ? '❤️' : '♡'}</button>
                     </div>
                 </div>
                 <h4 class="material-title">${escapeHTML(item.title)}</h4>
-                <p class="material-tags">${escapeHTML(item.tags.join(" "))}</p>
+                <p class="material-tags">${escapeHTML((item.tags || []).join(" "))}</p>
             </div>
             <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.8rem; color: var(--accent-color);">▶ 試聴する</span>
+                <span style="font-size: 0.8rem; color: var(--accent-color);">${item.type === 'image' ? '🔍 表示' : '▶ 試聴する'}</span>
                 <a href="${downloadPageUrl}" class="action-btn" style="padding: 6px 12px; font-size: 0.75rem; text-decoration:none;" onclick="event.stopPropagation();">ダウンロード</a>
             </div>
         `;
 
         card.addEventListener("click", () => {
-            playAudio({ ...item, fileUrl: proxiedUrl });
+            if (item.type === 'image') {
+                window.location.href = downloadPageUrl;
+            } else {
+                playAudio({ ...item, fileUrl: proxiedUrl });
+            }
         });
 
         container.appendChild(card);
@@ -217,17 +252,14 @@ function renderCategoryList(materials, container) {
     }
 
     const filtered = materials.filter(item => {
-        if (targetCategory && item.category !== targetCategory) return false;
+        if (targetCategory) {
+            const matchCategory = item.category === targetCategory;
+            const matchChannel = item.channel === targetCategory;
+            if (!matchCategory && !matchChannel) return false;
+        }
 
         if (targetType) {
-            const isBgCategory = item.category && (
-                item.category.includes('学校') || item.category.includes('日常') || 
-                item.category.includes('自然') || item.category.includes('空') || 
-                item.category.includes('ダンジョン') || item.category.includes('廃墟') || 
-                item.category.includes('SF') || item.category.includes('建築')
-            );
-            const itemType = item.type || (isBgCategory ? 'image' : 'bgm');
-            if (itemType !== targetType) return false;
+            if (item.type !== targetType) return false;
         }
         return true;
     });
@@ -244,31 +276,35 @@ function renderCategoryList(materials, container) {
         card.style.cursor = "pointer";
 
         const proxiedUrl = getProxiedUrl(item.fileUrl);
-        const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(proxiedUrl)}&tags=${encodeURIComponent(item.tags.join(" "))}&category=${encodeURIComponent(item.category)}`;
+        const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(proxiedUrl)}&tags=${encodeURIComponent((item.tags || []).join(" "))}&category=${encodeURIComponent(item.category)}`;
 
-        const durationDisplay = item.duration ? `<span style="font-size: 0.8rem; color: var(--text-secondary);">⏱ ${escapeHTML(item.duration)}</span>` : '';
+        const durationDisplay = item.duration && item.duration !== '-' ? `<span style="font-size: 0.8rem; color: var(--text-secondary);">⏱ ${escapeHTML(item.duration)}</span>` : '';
         const isFav = favorites.includes(item.id);
 
         card.innerHTML = `
             <div>
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span class="card-header-tag">${escapeHTML(item.channel)}</span>
+                    <span class="card-header-tag">${item.type === 'image' ? '🖼️' : '🎵'} ${escapeHTML(item.channel)}</span>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         ${durationDisplay}
                         <button class="fav-btn ${isFav ? 'active' : ''}" data-id="${item.id}" onclick="toggleFavorite('${item.id}', event)" title="お気に入り">${isFav ? '❤️' : '♡'}</button>
                     </div>
                 </div>
                 <h3 class="material-title" style="margin-top:8px;">${escapeHTML(item.title)}</h3>
-                <p class="material-tags">${escapeHTML(item.tags.join(" "))}</p>
+                <p class="material-tags">${escapeHTML((item.tags || []).join(" "))}</p>
             </div>
             <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.8rem; color: var(--accent-color);">▶ 試聴する</span>
+                <span style="font-size: 0.8rem; color: var(--accent-color);">${item.type === 'image' ? '🔍 表示' : '▶ 試聴する'}</span>
                 <a href="${downloadPageUrl}" class="action-btn" style="text-align:center; text-decoration:none; padding: 8px 16px;" onclick="event.stopPropagation();">ダウンロード</a>
             </div>
         `;
 
         card.addEventListener("click", () => {
-            playAudio({ ...item, fileUrl: proxiedUrl });
+            if (item.type === 'image') {
+                window.location.href = downloadPageUrl;
+            } else {
+                playAudio({ ...item, fileUrl: proxiedUrl });
+            }
         });
 
         container.appendChild(card);
@@ -289,7 +325,7 @@ function playAudio(item) {
     titleEl.textContent = item.title;
     catEl.textContent = `${item.channel} / ${item.category}`;
 
-    const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(item.fileUrl)}&tags=${encodeURIComponent(item.tags.join(" "))}&category=${encodeURIComponent(item.category)}`;
+    const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(item.fileUrl)}&tags=${encodeURIComponent((item.tags || []).join(" "))}&category=${encodeURIComponent(item.category)}`;
     if (dlBtn) dlBtn.href = downloadPageUrl;
 
     if (currentPlayingUrl !== item.fileUrl) {
@@ -395,7 +431,8 @@ function initCustomAudioPlayer() {
 }
 
 function escapeHTML(str) {
-    return str.replace(/[&<>'"]/g, tag => ({
+    if (!str) return '';
+    return String(str).replace(/[&<>'"]/g, tag => ({
         '&': '&amp;',
         '<': '&lt;',
         '>': '&gt;',
