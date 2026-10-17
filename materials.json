@@ -1,28 +1,15 @@
 [
-
   {
-
     "id": "1",
-
     "channel": "BGM",
-
     "title": "鉄錆の足音",
-
     "category": "ホラー・不穏",
-
     "duration": "4:00",
-
     "tags": [
-
       "#ホラー",
-
       "#不穏",
-
       "#サスペンス"
-
     ],
-
     "fileUrl": "https://cdn.discordapp.com/attachments/1560689211676561458/1560689379695923210/6f609bd694ce5601.mp3?ex=6ad3a0c0&is=6ad24f40&hm=61e264e4f411f0efec8b5f827d85b9a53451c52f626f6929e19d74442a44f8d0&"
-
   },
 ]
