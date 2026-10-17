@@ -42,13 +42,14 @@
             </div>
 
             <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                <a id="actual-download-btn" href="#" class="action-btn" style="padding: 12px 30px; text-decoration: none; font-weight: bold; background: var(--accent-color); color: #0f172a;" download>💾 素材をダウンロード</a>
+                <!-- 💾 強制ダウンロードを実行するボタン -->
+                <button id="actual-download-btn" class="action-btn" style="padding: 12px 30px; font-weight: bold; background: var(--accent-color); color: #0f172a; border: none; cursor: pointer; border-radius: 8px;">💾 素材をダウンロード</button>
                 <a href="index.html" class="action-btn" style="padding: 12px 20px; text-decoration: none; background: #334155; color: #f8fafc;">ホームに戻る</a>
             </div>
         </div>
     </div>
 
-    <!-- 🎵 復活したスティッキープレイヤーバー（ダウンロードページでの試聴用） -->
+    <!-- 🎵 スティッキープレイヤーバー -->
     <div id="sticky-player-bar" class="sticky-player-bar" style="display: flex;">
         <div class="player-info">
             <span id="sticky-title" class="player-title">プレイヤー準備完了</span>
@@ -78,7 +79,7 @@
         </div>
 
         <div class="player-action">
-            <a id="sticky-download-btn" href="#" class="action-btn">ダウンロード</a>
+            <button id="sticky-download-btn" class="action-btn" style="border:none; cursor:pointer;">ダウンロード</button>
         </div>
 
         <audio id="hidden-audio" preload="none"></audio>
@@ -89,7 +90,6 @@
     </footer>
 
     <script>
-        // ダウンロードページのパラメータ解析・プレビュー・音声バー連動処理
         const PROXY_WORKER_URL = "https://material-proxy.tutchimikadoseimei.workers.dev/?url=";
 
         document.addEventListener("DOMContentLoaded", () => {
@@ -101,29 +101,56 @@
             const tags = params.get('tags') || '';
             const category = params.get('category') || '';
 
-            // URLのプロキシ補正
             let fileUrl = rawUrl;
             if (fileUrl && !fileUrl.includes('material-proxy') && fileUrl.includes('discord')) {
                 fileUrl = PROXY_WORKER_URL + encodeURIComponent(fileUrl);
             }
 
-            // 画面要素への反映
             document.getElementById('detail-title').textContent = title;
             document.getElementById('detail-tag').textContent = `${type === 'image' ? '🖼️ 背景・イラスト' : '🎵 BGM'} / ${channel}`;
             document.getElementById('detail-tags').textContent = `タグ: ${tags} | カテゴリ: ${category}`;
-            document.getElementById('actual-download-btn').href = fileUrl;
-            document.getElementById('sticky-download-btn').href = fileUrl;
             document.getElementById('credit-text').value = `${type === 'image' ? '背景・イラスト' : 'BGM'}：${title} (${channel}) | AI Material Archive`;
 
-            // プレビューエリアの構築（画像ならimg表示、音声なら試聴案内）
+            // 💾 強制ダウンロード処理のバインド
+            const triggerDownload = async () => {
+                if (!fileUrl) return;
+                try {
+                    alert("ダウンロードを開始します。少々お待ちください...");
+                    const response = await fetch(fileUrl);
+                    const blob = await response.blob();
+                    const blobUrl = window.URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = blobUrl;
+                    
+                    // 拡張子の推測
+                    let ext = type === 'image' ? 'png' : 'mp3';
+                    if (fileUrl.includes('.jpg') || fileUrl.includes('.jpeg')) ext = 'jpg';
+                    if (fileUrl.includes('.webp')) ext = 'webp';
+                    
+                    a.download = `${title}.${ext}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(blobUrl);
+                    a.remove();
+                } catch (e) {
+                    console.error("ダウンロードに失敗しました:", e);
+                    // フォールバックとして別タブで開く
+                    window.open(fileUrl, '_blank');
+                }
+            };
+
+            document.getElementById('actual-download-btn').addEventListener('click', triggerDownload);
+            const stickyDlBtn = document.getElementById('sticky-download-btn');
+            if (stickyDlBtn) stickyDlBtn.addEventListener('click', triggerDownload);
+
             const previewArea = document.getElementById('material-preview-area');
             if (type === 'image' && fileUrl) {
                 previewArea.innerHTML = `<img src="${fileUrl}" alt="${title}" style="max-width: 100%; max-height: 400px; border-radius: 8px; object-fit: contain; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">`;
-                // 画像の場合はプレイヤーバーを隠すか、そのまま置いておく
             } else if (fileUrl) {
                 previewArea.innerHTML = `<p style="color: var(--accent-color); font-size: 0.95rem;">▶ 下部のプレイヤーバーから試聴できます。</p>`;
                 
-                // 音声の場合はプレイヤーにセット
                 const audio = document.getElementById('hidden-audio');
                 const bar = document.getElementById('sticky-player-bar');
                 const titleEl = document.getElementById('sticky-title');
@@ -147,7 +174,6 @@
             alert("クレジット表記例をコピーしました: " + copyText.value);
         }
 
-        // プレイヤー操作スクリプト
         function initCustomAudioPlayer() {
             const audio = document.getElementById("hidden-audio");
             const playBtn = document.getElementById("play-pause-btn");
@@ -175,7 +201,7 @@
             });
 
             if (back30Btn) back30Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.max(0, audio.currentTime - 30); });
-            if (back10Btn) back10Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.max(0, audio.currentTime - 10); });
+            if (back10Btn) back10Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.max(0, audio.duration - 10); });
             if (forward10Btn) forward10Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.min(audio.duration, audio.currentTime + 10); });
             if (forward30Btn) forward30Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.min(audio.duration, audio.currentTime + 30); });
 
