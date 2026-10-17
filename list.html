@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>素材一覧 | AI Material Archive</title>
+    <meta name="description" content="AI Material Archiveのカテゴリ別素材一覧ページ。商用利用OK・登録不要のフリー素材。">
+
+    <!-- 🚀 パフォーマンス改善：CDNへの事前接続（preconnect）で読み込みのワンテンポを解消 -->
+    <link rel="preconnect" href="https://cdn.discordapp.com">
+    <link rel="preconnect" href="https://media.discordapp.net">
+    <link rel="preconnect" href="https://material-proxy.tutchimikadoseimei.workers.dev">
+
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -66,8 +73,8 @@
             <a id="sticky-download-btn" href="#" class="action-btn">無料ダウンロードへ</a>
         </div>
 
-        <!-- 非表示の音声エンジン -->
-        <audio id="hidden-audio"></audio>
+        <!-- 非表示の音声エンジン（preload="none"で不要な読み込みをカット） -->
+        <audio id="hidden-audio" preload="none"></audio>
     </div>
 
     <script src="app.js"></script>
