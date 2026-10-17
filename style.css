@@ -161,27 +161,68 @@ header nav a:hover {
     border-radius: 3px;
 }
 
-.scroll-card, .material-card {
+/* 🖼️ Pixta風ギャラリーカードのスタイル */
+.material-card, .scroll-card {
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: 12px;
-    padding: 20px;
-    transition: all 0.2s ease;
+    overflow: hidden;
+    transition: all 0.25s ease;
     position: relative;
-}
-
-.scroll-card {
-    flex: 0 0 280px;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
     cursor: pointer;
 }
 
-.scroll-card:hover, .material-card:hover {
+.scroll-card {
+    flex: 0 0 260px;
+    justify-content: flex-start;
+}
+
+.material-card:hover, .scroll-card:hover {
     background: var(--card-hover-bg);
     border-color: rgba(56, 189, 248, 0.4);
-    transform: translateY(-2px);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+}
+
+/* サムネイル画像コンテナ */
+.card-thumbnail-wrap {
+    width: 100%;
+    height: 160px;
+    background: #0b0f19;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.card-thumbnail-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.material-card:hover .card-thumbnail-wrap img, .scroll-card:hover .card-thumbnail-wrap img {
+    transform: scale(1.05);
+}
+
+/* カード情報エリア */
+.card-info {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    justify-content: space-between;
+}
+
+.card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
 }
 
 .card-header-tag {
@@ -222,15 +263,22 @@ header nav a:hover {
 }
 
 .material-title {
-    margin: 8px 0 6px 0;
-    font-size: 1.05rem;
+    margin: 6px 0 4px 0;
+    font-size: 1rem;
+    font-weight: 600;
     color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .material-tags {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--text-secondary);
     margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .info-grid {
@@ -411,10 +459,10 @@ header nav a:hover {
     background: linear-gradient(to bottom, #2ea44f, #2c974b);
     color: #fff;
     border: none;
-    padding: 9px 16px;
+    padding: 8px 14px;
     border-radius: 8px;
     font-weight: bold;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     cursor: pointer;
     text-decoration: none;
     box-shadow: 0 4px 6px rgba(0,0,0,0.3);

@@ -26,11 +26,11 @@
                 <!-- 動的プレビュー -->
             </div>
 
-            <!-- ダウンロードボタン -->
+            <!-- ダウンロードボタン（強制Blobダウンロード対応） -->
             <div style="margin-top: 30px;">
-                <a id="download-btn" href="#" class="action-btn" style="font-size: 1.1rem; padding: 14px 32px; display: inline-block; text-decoration: none;" download>
+                <button id="download-btn" class="action-btn" style="font-size: 1.1rem; padding: 14px 32px; display: inline-block; cursor: pointer; border: none;">
                     📥 ダウンロード 📥
-                </a>
+                </button>
             </div>
 
             <!-- 🤝 エンゲージメント機能エリア（コピー＆シェア） -->
@@ -61,11 +61,13 @@
         const tags = params.get('tags') || '';
 
         document.getElementById('item-title').textContent = title;
-        document.getElementById('item-channel').textContent = `🎵 ${channel}`;
+        document.getElementById('item-channel').textContent = `${type === 'image' ? '🖼️' : '🎵'} ${channel}`;
         document.getElementById('item-tags').textContent = tags;
 
         const previewBox = document.getElementById('item-preview');
         const downloadBtn = document.getElementById('download-btn');
+
+        let targetFileUrl = url;
 
         if (url && url !== 'null' && url !== '') {
             if (type === 'bgm') {
@@ -73,7 +75,40 @@
             } else {
                 previewBox.innerHTML = `<img src="${url}" alt="${title}" style="max-width: 100%; max-height: 400px; border-radius: 8px;" onerror="this.outerHTML='<p style=\'color:var(--heart-color);\'>⚠️ 画像ファイルの読み込みに失敗しました。</p>';">`;
             }
-            downloadBtn.href = url;
+
+            // 📥 確実にダウンロードさせる処理（Blob化）
+            downloadBtn.addEventListener('click', async () => {
+                downloadBtn.textContent = "📥 ダウンロード中...";
+                downloadBtn.style.opacity = "0.7";
+                try {
+                    const response = await fetch(targetFileUrl);
+                    const blob = await response.blob();
+                    const blobUrl = window.URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    
+                    // 拡張子の推測（画像なら .png、音声なら .mp3 など）
+                    let ext = type === 'image' ? '.png' : '.mp3';
+                    if (targetFileUrl.includes('.jpg') || targetFileUrl.includes('.jpeg')) ext = '.jpg';
+                    if (targetFileUrl.includes('.webp')) ext = '.webp';
+                    if (targetFileUrl.includes('.wav')) ext = '.wav';
+
+                    a.download = `${title}${ext}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    
+                    a.remove();
+                    window.URL.revokeObjectURL(blobUrl);
+                } catch (err) {
+                    console.error("ダウンロードに失敗しました。別タブで開きます:", err);
+                    window.open(targetFileUrl, '_blank');
+                } finally {
+                    downloadBtn.textContent = "📥 ダウンロード 📥";
+                    downloadBtn.style.opacity = "1";
+                }
+            });
+
         } else {
             document.getElementById('item-title').textContent = "有効なファイルが見つかりませんでした";
             downloadBtn.style.display = "none";
@@ -85,7 +120,8 @@
 
         // 📋 クレジットコピー機能
         document.getElementById('copy-credit-btn').addEventListener('click', () => {
-            const creditText = `BGM: ${title} (${channel} / AI Material Archive)`;
+            const creditType = type === 'image' ? '画像' : 'BGM';
+            const creditText = `${creditType}: ${title} (${channel} / AI Material Archive)`;
             navigator.clipboard.writeText(creditText).then(() => {
                 showToast("クレジットをコピーしました！");
             });
@@ -94,7 +130,7 @@
         // 𝕏 シェア機能
         document.getElementById('share-twitter-btn').addEventListener('click', () => {
             const shareUrl = window.location.href;
-            const tweetText = encodeURIComponent(`【無料AI素材】「${title}」を見つけました！\n#AI素材 #BGM #フリー素材`);
+            const tweetText = encodeURIComponent(`【無料AI素材】「${title}」を見つけました！\n#AI素材 #フリー素材`);
             window.open(`https://twitter.com/intent/tweet?text=${tweetText}&url=${encodeURIComponent(shareUrl)}`, '_blank');
         });
 

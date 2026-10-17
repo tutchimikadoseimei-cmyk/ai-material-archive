@@ -68,13 +68,53 @@ function renderDynamicCategories(categories) {
 
 function getProxiedUrl(url) {
     if (!url) return '#';
-    if (url.includes('material-proxy')) {
-        return url;
-    }
-    if (url.startsWith('http')) {
-        return PROXY_WORKER_URL + encodeURIComponent(url);
-    }
+    if (url.includes('material-proxy')) return url;
+    if (url.startsWith('http')) return PROXY_WORKER_URL + encodeURIComponent(url);
     return url;
+}
+
+function handleCardClick(item, proxiedUrl, downloadPageUrl) {
+    if (item.type === 'image') {
+        openImageModal(item, proxiedUrl, downloadPageUrl);
+    } else {
+        playAudio({ ...item, fileUrl: proxiedUrl });
+    }
+}
+
+function openImageModal(item, proxiedUrl, downloadPageUrl) {
+    const existingModal = document.getElementById('image-preview-modal');
+    if (existingModal) existingModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'image-preview-modal';
+    modal.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column;
+        justify-content: center; align-items: center; z-index: 9999; padding: 20px;
+        box-sizing: border-box; overflow: hidden;
+    `;
+
+    modal.innerHTML = `
+        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: url('${proxiedUrl}'); background-size: cover; background-position: center; filter: blur(20px) brightness(0.4); transform: scale(1.1); z-index: 0;"></div>
+        
+        <div style="position: relative; max-width: 90%; max-height: 85%; display: flex; flex-direction: column; align-items: center; background: rgba(30, 30, 46, 0.9); backdrop-filter: blur(10px); padding: 25px; border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.6); z-index: 1; border: 1px solid rgba(255,255,255,0.1);">
+            <button id="close-modal-btn" style="position: absolute; top: 12px; right: 15px; background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; z-index: 10;">✕</button>
+            <img src="${proxiedUrl}" alt="${escapeHTML(item.title)}" style="max-width: 100%; max-height: 55vh; object-fit: contain; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+            <h3 style="color: #fff; margin-top: 15px; font-size: 1.2rem; text-align: center;">${escapeHTML(item.title)}</h3>
+            <p style="color: #ccc; font-size: 0.85rem; margin-top: 5px;">${escapeHTML((item.tags || []).join(" "))}</p>
+            <div style="margin-top: 15px;">
+                <a href="${downloadPageUrl}" class="action-btn" style="text-decoration:none; padding: 10px 24px; font-size: 0.9rem; display: inline-block;">ダウンロードページへ</a>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal || e.target.id === 'close-modal-btn') {
+            modal.remove();
+        }
+    });
 }
 
 function initSearch() {
@@ -114,7 +154,6 @@ function executeSearch(queryText) {
         const tagMatch = Array.isArray(item.tags) ? item.tags.some(tag => tag.toLowerCase().includes(query)) : false;
         const categoryMatch = item.category ? item.category.toLowerCase().includes(query) : false;
         const channelMatch = item.channel ? item.channel.toLowerCase().includes(query) : false;
-        
         return titleMatch || tagMatch || categoryMatch || channelMatch;
     });
 
@@ -140,6 +179,48 @@ function toggleFavorite(itemId, event) {
     renderFavorites();
 }
 
+// 🌟 Pixta風ギャラリーカード生成ヘルパー
+function createCardElement(item, proxiedUrl, downloadPageUrl, isFav, durationDisplay, cardClass = "material-card") {
+    const card = document.createElement("div");
+    card.className = cardClass;
+
+    let thumbnailHtml = "";
+    if (item.type === 'image' && proxiedUrl) {
+        thumbnailHtml = `
+            <div class="card-thumbnail-wrap">
+                <img src="${proxiedUrl}" alt="${escapeHTML(item.title)}" loading="lazy">
+            </div>
+        `;
+    }
+
+    card.innerHTML = `
+        ${thumbnailHtml}
+        <div class="card-info">
+            <div>
+                <div class="card-header-row">
+                    <span class="card-header-tag">${item.type === 'image' ? '🖼️' : '🎵'} ${escapeHTML(item.channel)}</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        ${durationDisplay}
+                        <button class="fav-btn ${isFav ? 'active' : ''}" data-id="${item.id}" onclick="toggleFavorite('${item.id}', event)" title="お気に入り">${isFav ? '❤️' : '♡'}</button>
+                    </div>
+                </div>
+                <h4 class="material-title">${escapeHTML(item.title)}</h4>
+                <p class="material-tags">${escapeHTML((item.tags || []).join(" "))}</p>
+            </div>
+            <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); pt-2;">
+                <span style="font-size: 0.8rem; color: var(--accent-color); font-weight: 500;">${item.type === 'image' ? '🔍 拡大表示' : '▶ 試聴する'}</span>
+                <a href="${downloadPageUrl}" class="action-btn" style="padding: 6px 14px; font-size: 0.75rem; text-decoration:none;" onclick="event.stopPropagation();">詳細・DL</a>
+            </div>
+        </div>
+    `;
+
+    card.addEventListener("click", () => {
+        handleCardClick(item, proxiedUrl, downloadPageUrl);
+    });
+
+    return card;
+}
+
 function renderFavorites() {
     const container = document.getElementById('favorites-scroll-container');
     if (!container) return;
@@ -153,40 +234,12 @@ function renderFavorites() {
 
     container.innerHTML = "";
     favItems.forEach(item => {
-        const card = document.createElement("div");
-        card.className = "scroll-card";
-
         const proxiedUrl = getProxiedUrl(item.fileUrl);
         const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(proxiedUrl)}&tags=${encodeURIComponent((item.tags || []).join(" "))}&category=${encodeURIComponent(item.category)}`;
-
         const durationDisplay = item.duration && item.duration !== '-' ? `<span style="font-size: 0.75rem; color: var(--text-secondary);">⏱ ${escapeHTML(item.duration)}</span>` : '';
+        const isFav = favorites.includes(item.id);
 
-        card.innerHTML = `
-            <div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span class="card-header-tag">${item.type === 'image' ? '🖼️' : '🎵'} ${escapeHTML(item.channel)}</span>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        ${durationDisplay}
-                        <button class="fav-btn active" data-id="${item.id}" onclick="toggleFavorite('${item.id}', event)" title="お気に入り解除">❤️</button>
-                    </div>
-                </div>
-                <h4 class="material-title">${escapeHTML(item.title)}</h4>
-                <p class="material-tags">${escapeHTML((item.tags || []).join(" "))}</p>
-            </div>
-            <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.8rem; color: var(--accent-color);">${item.type === 'image' ? '🔍 表示' : '▶ 試聴する'}</span>
-                <a href="${downloadPageUrl}" class="action-btn" style="padding: 6px 12px; font-size: 0.75rem; text-decoration:none;" onclick="event.stopPropagation();">ダウンロード</a>
-            </div>
-        `;
-
-        card.addEventListener("click", () => {
-            if (item.type === 'image') {
-                window.location.href = downloadPageUrl;
-            } else {
-                playAudio({ ...item, fileUrl: proxiedUrl });
-            }
-        });
-
+        const card = createCardElement(item, proxiedUrl, downloadPageUrl, isFav, durationDisplay, "material-card");
         container.appendChild(card);
     });
 }
@@ -199,41 +252,12 @@ function renderPickup(materials, container) {
     }
 
     materials.forEach(item => {
-        const card = document.createElement("div");
-        card.className = "scroll-card";
-
         const proxiedUrl = getProxiedUrl(item.fileUrl);
         const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(proxiedUrl)}&tags=${encodeURIComponent((item.tags || []).join(" "))}&category=${encodeURIComponent(item.category)}`;
-
         const durationDisplay = item.duration && item.duration !== '-' ? `<span style="font-size: 0.75rem; color: var(--text-secondary);">⏱ ${escapeHTML(item.duration)}</span>` : '';
         const isFav = favorites.includes(item.id);
 
-        card.innerHTML = `
-            <div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span class="card-header-tag">${item.type === 'image' ? '🖼️' : '🎵'} ${escapeHTML(item.channel)}</span>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        ${durationDisplay}
-                        <button class="fav-btn ${isFav ? 'active' : ''}" data-id="${item.id}" onclick="toggleFavorite('${item.id}', event)" title="お気に入り">${isFav ? '❤️' : '♡'}</button>
-                    </div>
-                </div>
-                <h4 class="material-title">${escapeHTML(item.title)}</h4>
-                <p class="material-tags">${escapeHTML((item.tags || []).join(" "))}</p>
-            </div>
-            <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.8rem; color: var(--accent-color);">${item.type === 'image' ? '🔍 表示' : '▶ 試聴する'}</span>
-                <a href="${downloadPageUrl}" class="action-btn" style="padding: 6px 12px; font-size: 0.75rem; text-decoration:none;" onclick="event.stopPropagation();">ダウンロード</a>
-            </div>
-        `;
-
-        card.addEventListener("click", () => {
-            if (item.type === 'image') {
-                window.location.href = downloadPageUrl;
-            } else {
-                playAudio({ ...item, fileUrl: proxiedUrl });
-            }
-        });
-
+        const card = createCardElement(item, proxiedUrl, downloadPageUrl, isFav, durationDisplay, "material-card");
         container.appendChild(card);
     });
 }
@@ -271,42 +295,12 @@ function renderCategoryList(materials, container) {
     }
 
     filtered.forEach(item => {
-        const card = document.createElement("div");
-        card.className = "material-card";
-        card.style.cursor = "pointer";
-
         const proxiedUrl = getProxiedUrl(item.fileUrl);
         const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(proxiedUrl)}&tags=${encodeURIComponent((item.tags || []).join(" "))}&category=${encodeURIComponent(item.category)}`;
-
         const durationDisplay = item.duration && item.duration !== '-' ? `<span style="font-size: 0.8rem; color: var(--text-secondary);">⏱ ${escapeHTML(item.duration)}</span>` : '';
         const isFav = favorites.includes(item.id);
 
-        card.innerHTML = `
-            <div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span class="card-header-tag">${item.type === 'image' ? '🖼️' : '🎵'} ${escapeHTML(item.channel)}</span>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        ${durationDisplay}
-                        <button class="fav-btn ${isFav ? 'active' : ''}" data-id="${item.id}" onclick="toggleFavorite('${item.id}', event)" title="お気に入り">${isFav ? '❤️' : '♡'}</button>
-                    </div>
-                </div>
-                <h3 class="material-title" style="margin-top:8px;">${escapeHTML(item.title)}</h3>
-                <p class="material-tags">${escapeHTML((item.tags || []).join(" "))}</p>
-            </div>
-            <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.8rem; color: var(--accent-color);">${item.type === 'image' ? '🔍 表示' : '▶ 試聴する'}</span>
-                <a href="${downloadPageUrl}" class="action-btn" style="text-align:center; text-decoration:none; padding: 8px 16px;" onclick="event.stopPropagation();">ダウンロード</a>
-            </div>
-        `;
-
-        card.addEventListener("click", () => {
-            if (item.type === 'image') {
-                window.location.href = downloadPageUrl;
-            } else {
-                playAudio({ ...item, fileUrl: proxiedUrl });
-            }
-        });
-
+        const card = createCardElement(item, proxiedUrl, downloadPageUrl, isFav, durationDisplay, "material-card");
         container.appendChild(card);
     });
 }
