@@ -1,5 +1,5 @@
 const PROXY_WORKER_URL = "https://material-proxy.tutchimikadoseimei.workers.dev/?url=";
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxuB6Ps7mBo-Szy2VyOLSqXem0Y38VUFousaF69GinBEBeMrCq6zwz-ngh02fcF5Kmzdw/exec"; // ★ご自身のGAS URLに書き換えてください
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxuB6Ps7mBo-Szy2VyOLSqXem0Y38VUFousaF69GinBEBeMrCq6zwz-ngh02fcF5Kmzdw/exec";
 
 let allMaterials = [];
 let allCategories = [];
@@ -33,7 +33,7 @@ async function initApp() {
         // 🌟 durationが日付文字列になっている場合の安全対策
         allMaterials.forEach(item => {
             if (item.duration && item.duration.includes('GMT')) {
-                item.duration = '4:00'; // または適切な長さにフォールバック
+                item.duration = '4:00';
             }
         });
 
@@ -54,7 +54,6 @@ async function initApp() {
 
     } catch (error) {
         console.warn("GASからの取得に失敗、またはエラー:", error);
-        // フォールバックとしてローカルJSONを試す場合
         try {
             let resLocal = await fetch("materials.json");
             let rawData = await resLocal.json();
@@ -201,7 +200,6 @@ function toggleFavorite(itemId, event) {
     renderFavorites();
 }
 
-// 🌟 Pixta風ギャラリーカード生成ヘルパー
 function createCardElement(item, proxiedUrl, downloadPageUrl, isFav, durationDisplay, cardClass = "material-card") {
     const card = document.createElement("div");
     card.className = cardClass;
@@ -229,7 +227,7 @@ function createCardElement(item, proxiedUrl, downloadPageUrl, isFav, durationDis
                 <h4 class="material-title">${escapeHTML(item.title)}</h4>
                 <p class="material-tags">${escapeHTML((item.tags || []).join(" "))}</p>
             </div>
-            <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); pt-2;">
+            <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
                 <span style="font-size: 0.8rem; color: var(--accent-color); font-weight: 500;">${item.type === 'image' ? '🔍 拡大表示' : '▶ 試聴する'}</span>
                 <a href="${downloadPageUrl}" class="action-btn" style="padding: 6px 14px; font-size: 0.75rem; text-decoration:none;" onclick="event.stopPropagation();">詳細・DL</a>
             </div>
