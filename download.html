@@ -111,18 +111,19 @@
             document.getElementById('detail-tags').textContent = `タグ: ${tags} | カテゴリ: ${category}`;
             document.getElementById('credit-text').value = `${type === 'image' ? '背景・イラスト' : 'BGM'}：${title} (${channel}) | AI Material Archive`;
 
-            // 💾 強制ダウンロード処理のバインド
-            const triggerDownload = async () => {
-                if (!fileUrl) return;
-                try {
-                    alert("ダウンロードを開始します。少々お待ちください...");
-                    const response = await fetch(fileUrl);
-                    const blob = await response.blob();
-                    const blobUrl = window.URL.createObjectURL(blob);
-                    
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = blobUrl;
+
+　　　　　　 // 💾 強制ダウンロード処理のバインド
+　　　　　　const triggerDownload = async () => {
+   　　　　 if (!fileUrl) return;
+  　　　　  try {
+       　　　　 const response = await fetch(fileUrl);
+        　　　　const blob = await response.blob();
+        　　　　const blobUrl = window.URL.createObjectURL(blob);
+
+        　　　　const a = document.createElement('a');
+        　　　　a.style.display = 'none';
+        　　　　a.href = blobUrl;
+
                     
                     // 拡張子の推測
                     let ext = type === 'image' ? 'png' : 'mp3';
