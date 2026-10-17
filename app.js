@@ -1,8 +1,5 @@
-// 🌐 Cloudflare Workers の URL
 const PROXY_WORKER_URL = "https://material-proxy.tutchimikadoseimei.workers.dev/?url=";
-
-// 🌐 スプレッドシート（GAS）の Web App URL（★ご自身のURLに書き換えてください）
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxuB6Ps7mBo-Szy2VyOLSqXem0Y38VUFousaF69GinBEBeMrCq6zwz-ngh02fcF5Kmzdw/exec";
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxuB6Ps7mBo-Szy2VyOLSqXem0Y38VUFousaF69GinBEBeMrCq6zwz-ngh02fcF5Kmzdw/exec"; // ★ご自身のGAS URLに書き換えてください
 
 let allMaterials = [];
 let currentPlayingUrl = "";
@@ -15,10 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function initApp() {
     try {
-        // まずGAS（スプレッドシート）から最新データを動的に取得
         let response = await fetch(GAS_API_URL);
         
-        // エラーや通信失敗時はローカルの materials.json に安全にフォールバック
         if (!response.ok) {
             console.warn("GASからの取得に失敗したため、ローカルJSONを使用します。");
             response = await fetch("materials.json");
@@ -44,13 +39,15 @@ async function initApp() {
     }
 }
 
-// 🛡️ Discord直リンクをCloudflare Worker経由に隠蔽・変換する関数
-function getProxiedUrl(originalDiscordUrl) {
-    if (!originalDiscordUrl) return '#';
-    if (originalDiscordUrl.startsWith('http')) {
-        return PROXY_WORKER_URL + encodeURIComponent(originalDiscordUrl);
+function getProxiedUrl(url) {
+    if (!url) return '#';
+    if (url.includes('material-proxy')) {
+        return url; // すでにGAS側でラップされていればそのまま返す
     }
-    return originalDiscordUrl;
+    if (url.startsWith('http')) {
+        return PROXY_WORKER_URL + encodeURIComponent(url);
+    }
+    return url;
 }
 
 function initSearch() {
