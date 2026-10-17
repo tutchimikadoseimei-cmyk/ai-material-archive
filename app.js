@@ -4,8 +4,8 @@ const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxuB6Ps7mBo-Szy2VyO
 let allMaterials = [];
 let allCategories = [];
 let currentPlayingUrl = "";
+let isComposing = false;
 
-// 🔒 堅牢なlocalStorage読み込み（お気に入り）
 let favorites = [];
 try {
     const rawFavs = localStorage.getItem('ai_material_favs');
@@ -25,18 +25,21 @@ document.addEventListener("DOMContentLoaded", () => {
     initFavoriteBackupTools();
 });
 
-// 🚀 爆速化：localStorageキャッシュを活用した初期化処理
 async function initApp() {
     const CACHE_KEY = 'ai_material_cache_v1';
     const CACHE_TIME_KEY = 'ai_material_cache_time_v1';
-    const CACHE_TTL = 30 * 60 * 1000; // 30分間キャッシュ有効
+    const CACHE_TTL = 30 * 60 * 1000;
+
+    const pickupContainer = document.getElementById('auto-scroll-container');
+    if (pickupContainer && allMaterials.length === 0) {
+        pickupContainer.innerHTML = renderLoadingSkeleton("素材を読み込んでいます...");
+    }
 
     try {
         const cachedData = localStorage.getItem(CACHE_KEY);
         const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
         const now = new Date().getTime();
 
-        // キャッシュが存在し有効期限内であれば、ネットワーク通信をスキップして即座に描画
         if (cachedData && cachedTime && (now - cachedTime < CACHE_TTL)) {
             const data = JSON.parse(cachedData);
             processMaterialData(data);
@@ -44,11 +47,9 @@ async function initApp() {
         }
 
         let response = await fetch(GAS_API_URL);
-        if (!response.ok) throw new Error("GASからの取得に失敗しました");
+        if (!response.ok) throw new Error("通信に失敗しました");
 
         const data = await response.json();
-        
-        // キャッシュに保存
         localStorage.setItem(CACHE_KEY, JSON.stringify(data));
         localStorage.setItem(CACHE_TIME_KEY, now);
 
@@ -58,15 +59,15 @@ async function initApp() {
         console.warn("GASからの取得に失敗、ローカルフォールバックを使用:", error);
         try {
             let resLocal = await fetch("materials.json");
+            if (!resLocal.ok) throw new Error("ローカルファイルが見つかりません");
             let rawData = await resLocal.json();
             processMaterialData(rawData);
         } catch (e) {
-            console.error("ローカルJSONの読み込みにも失敗しました:", e);
+            renderGlobalError("素材データの読み込みに失敗しました。ネットワーク接続を確認して再読み込みしてください。");
         }
     }
 }
 
-// データのパースと各セクション描画の共通処理
 function processMaterialData(data) {
     if (Array.isArray(data)) {
         allMaterials = data;
@@ -84,14 +85,10 @@ function processMaterialData(data) {
 
     renderDynamicCategories(allCategories);
     const pickupContainer = document.getElementById('auto-scroll-container');
-    if (pickupContainer) {
-        renderPickup(allMaterials, pickupContainer);
-    }
+    if (pickupContainer) renderPickup(allMaterials, pickupContainer);
 
     const listContainer = document.getElementById('list-container');
-    if (listContainer) {
-        renderCategoryList(allMaterials, listContainer);
-    }
+    if (listContainer) renderCategoryList(allMaterials, listContainer);
 
     renderFavorites();
     initSearchAndFilter();
@@ -165,14 +162,13 @@ function openImageModal(item, proxiedUrl, downloadPageUrl) {
     document.body.appendChild(modal);
 
     modal.addEventListener('click', (e) => {
-        if (e.target === modal || e.target.id === 'close-modal-btn') {
-            modal.remove();
-        }
+        if (e.target === modal || e.target.id === 'close-modal-btn') modal.remove();
     });
 }
 
 function initSearchAndFilter() {
     const searchInput = document.getElementById('search-input');
+    const sortSelect = document.getElementById('sort-select');
     const container = document.getElementById('auto-scroll-container');
     const pickupTitle = document.getElementById('pickup-title');
     if (!container) return;
@@ -183,9 +179,8 @@ function initSearchAndFilter() {
     const targetType = params.get('type') || '';
     const sortBy = params.get('sort') || 'new';
 
-    if (searchInput && searchQuery) {
-        searchInput.value = searchQuery;
-    }
+    if (searchInput) searchInput.value = searchQuery;
+    if (sortSelect) sortSelect.value = sortBy;
 
     let filtered = allMaterials.filter(item => {
         if (searchQuery) {
@@ -209,49 +204,71 @@ function initSearchAndFilter() {
         return true;
     });
 
+    // ソート処理（新着順・名前順・人気順）
     if (sortBy === 'name') {
         filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    } else if (sortBy === 'popular') {
+        // 人気順（お気に入り登録数やインプレッションの指標、またはIDの逆順などをベースに模擬）
+        filtered.sort((a, b) => (b.downloads || b.views || 0) - (a.downloads || a.views || 0) || String(b.id).localeCompare(String(a.id)));
     } else {
         filtered.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
     }
 
     if (pickupTitle) {
-        let titleText = "🔥 注目ピックアップ";
-        if (searchQuery || targetCategory || targetType) {
-            titleText = `🔍 検索・絞り込み結果 (${filtered.length}件)`;
-        } else {
-            titleText = `🔥 注目ピックアップ (${filtered.length}件)`;
-        }
+        let titleText = (searchQuery || targetCategory || targetType) ? `🔍 検索・絞り込み結果 (${filtered.length}件)` : `🔥 注目ピックアップ (${filtered.length}件)`;
         pickupTitle.innerHTML = `${titleText} <a href="index.html" style="font-size:0.8rem; margin-left:15px; color:var(--accent-color); text-decoration:underline; ${(searchQuery || targetCategory || targetType) ? '' : 'display:none;'}">条件クリア</a>`;
     }
 
     renderPickup(filtered, container);
 
-    if (searchInput) {
+    if (searchInput && !searchInput.dataset.initialized) {
+        searchInput.dataset.initialized = "true";
+        searchInput.addEventListener('compositionstart', () => { isComposing = true; });
+        searchInput.addEventListener('compositionend', (e) => {
+            isComposing = false;
+            updateSearchParamAndFilter(e.target.value.trim(), sortSelect ? sortSelect.value : 'new');
+        });
         searchInput.addEventListener('input', (e) => {
-            const val = e.target.value.trim();
-            const currentParams = new URLSearchParams(window.location.search);
-            if (val) {
-                currentParams.set('q', val);
-            } else {
-                currentParams.delete('q');
-            }
-            const newRelativePathQuery = window.location.pathname + '?' + currentParams.toString();
-            history.replaceState(null, '', newRelativePathQuery);
-            initSearchAndFilter();
+            if (isComposing) return;
+            updateSearchParamAndFilter(e.target.value.trim(), sortSelect ? sortSelect.value : 'new');
+        });
+    }
+
+    if (sortSelect && !sortSelect.dataset.initialized) {
+        sortSelect.dataset.initialized = "true";
+        sortSelect.addEventListener('change', (e) => {
+            updateSearchParamAndFilter(searchInput ? searchInput.value.trim() : '', e.target.value);
         });
     }
 }
 
+function updateSearchParamAndFilter(val, sortVal) {
+    const currentParams = new URLSearchParams(window.location.search);
+    if (val) currentParams.set('q', val);
+    else currentParams.delete('q');
+
+    if (sortVal && sortVal !== 'new') currentParams.set('sort', sortVal);
+    else currentParams.delete('sort');
+
+    history.replaceState(null, '', window.location.pathname + '?' + currentParams.toString());
+    initSearchAndFilter();
+}
+
 function toggleFavorite(itemId, event) {
-    event.stopPropagation();
-    const index = favorites.indexOf(itemId);
-    if (index > -1) {
-        favorites.splice(index, 1);
-    } else {
-        favorites.push(itemId);
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
     }
-    localStorage.setItem('ai_material_favs', JSON.stringify(favorites));
+    const index = favorites.indexOf(itemId);
+    if (index > -1) favorites.splice(index, 1);
+    else favorites.push(itemId);
+    
+    try {
+        localStorage.setItem('ai_material_favs', JSON.stringify(favorites));
+    } catch (e) {
+        alert("お気に入りの保存に失敗しました。");
+        return;
+    }
 
     document.querySelectorAll(`.fav-btn[data-id="${itemId}"]`).forEach(btn => {
         const isFav = favorites.includes(itemId);
@@ -270,7 +287,7 @@ function createCardElement(item, proxiedUrl, downloadPageUrl, isFav, durationDis
     if (item.type === 'image' && proxiedUrl) {
         thumbnailHtml = `
             <div class="card-thumbnail-wrap">
-                <img src="${proxiedUrl}" alt="${escapeHTML(item.title)}" loading="lazy">
+                <img src="${proxiedUrl}" alt="${escapeHTML(item.title)}" loading="lazy" onerror="this.onerror=null; this.parentNode.innerHTML='<div style=\\'color:#94a3b8; font-size:0.8rem; text-align:center; padding:20px;\\'>⚠️ 画像読み込み失敗</div>';">
             </div>
         `;
     }
@@ -280,13 +297,13 @@ function createCardElement(item, proxiedUrl, downloadPageUrl, isFav, durationDis
         <div class="card-info">
             <div>
                 <div class="card-header-row">
-                    <span class="card-header-tag">${item.type === 'image' ? '🖼️' : '🎵'} ${escapeHTML(item.channel)}</span>
+                    <span class="card-header-tag">${item.type === 'image' ? '🖼️ 背景' : '🎵 BGM'} ${escapeHTML(item.channel)}</span>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         ${durationDisplay}
                         <button class="fav-btn ${isFav ? 'active' : ''}" data-id="${item.id}" onclick="toggleFavorite('${item.id}', event)" title="お気に入り">${isFav ? '❤️' : '♡'}</button>
                     </div>
                 </div>
-                <h4 class="material-title">${escapeHTML(item.title)}</h4>
+                <h4 class="material-title" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</h4>
                 <p class="material-tags">${escapeHTML((item.tags || []).join(" "))}</p>
             </div>
             <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
@@ -308,9 +325,14 @@ function renderFavorites() {
     if (!container) return;
 
     const favItems = allMaterials.filter(item => favorites.includes(item.id));
-
     if (favItems.length === 0) {
-        container.innerHTML = "<p style='color: var(--text-secondary); padding: 10px;'>お気に入りに追加された素材はまだありません。ハートマークを押して保存してみましょう！</p>";
+        container.innerHTML = `
+            <div style='grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--text-secondary); background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed var(--border-color); width: 100%;'>
+                <p style='font-size: 1rem; margin-bottom: 8px;'>❤️ お気に入りに追加された素材はまだありません。</p>
+                <p style='font-size: 0.85rem; margin-bottom: 15px;'>気になった素材のカード右上にあるハートマーク（♡）を押して、ここに保存してみましょう。</p>
+                <a href='#search-input' style='color: var(--accent-color); text-decoration: underline; font-size: 0.9rem;'>素材を探しに行く ▶</a>
+            </div>
+        `;
         return;
     }
 
@@ -321,7 +343,7 @@ function renderFavorites() {
         const durationDisplay = item.duration && item.duration !== '-' ? `<span style="font-size: 0.75rem; color: var(--text-secondary);">⏱ ${escapeHTML(item.duration)}</span>` : '';
         const isFav = favorites.includes(item.id);
 
-        const card = createCardElement(item, proxiedUrl, downloadPageUrl, isFav, durationDisplay, "material-card");
+        const card = createCardElement(item, proxiedUrl, downloadPageUrl, isFav, durationDisplay, "scroll-card");
         container.appendChild(card);
     });
 }
@@ -329,7 +351,18 @@ function renderFavorites() {
 function renderPickup(materials, container) {
     container.innerHTML = "";
     if (materials.length === 0) {
-        container.innerHTML = "<div style='grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-secondary);'><p style='font-size: 1.1rem; margin-bottom: 10px;'>🔍 条件に一致する素材が見つかりませんでした。</p><a href='index.html' style='color: var(--accent-color); text-decoration: underline;'>すべての素材を表示する</a></div>";
+        container.innerHTML = `
+            <div style='grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-secondary); background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed var(--border-color);'>
+                <p style='font-size: 1.1rem; margin-bottom: 10px; color: var(--text-primary);'>🔍 一致する素材が見つかりませんでした</p>
+                <p style='font-size: 0.9rem; margin-bottom: 20px; line-height: 1.6;'>
+                    入力内容に入力間違いや余分なスペースが含まれていないかご確認ください。<br>
+                    または、条件を解除してすべての素材をご確認いただけます。
+                </p>
+                <div style='display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;'>
+                    <a href='index.html' class='action-btn' style='text-decoration:none; padding: 8px 18px;'>すべての素材を表示する</a>
+                </div>
+            </div>
+        `;
         return;
     }
 
@@ -351,10 +384,12 @@ function renderCategoryList(materials, container) {
 
     const titleEl = document.getElementById("category-title");
     const descEl = document.getElementById("category-description");
+    const breadcrumbEl = document.getElementById("breadcrumb-current");
 
     if (targetCategory) {
-        if (titleEl) titleEl.textContent = `📂 ${targetCategory} の素材`;
-        if (descEl) descEl.textContent = `「${targetCategory}」カテゴリに登録されている素材一覧です。`;
+        if (titleEl) titleEl.textContent = `📂 ${targetCategory} の素材一覧`;
+        if (descEl) descEl.textContent = `「${targetCategory}」カテゴリに登録されている素材一覧です。検索欄と組み合わせてさらに絞り込むことも可能です。`;
+        if (breadcrumbEl) breadcrumbEl.textContent = targetCategory;
     }
 
     const filtered = materials.filter(item => {
@@ -363,7 +398,6 @@ function renderCategoryList(materials, container) {
             const matchChannel = item.channel === targetCategory;
             if (!matchCategory && !matchChannel) return false;
         }
-
         if (targetType) {
             if (item.type !== targetType) return false;
         }
@@ -372,7 +406,13 @@ function renderCategoryList(materials, container) {
 
     container.innerHTML = "";
     if (filtered.length === 0) {
-        container.innerHTML = "<p style='color: var(--text-secondary);'>このカテゴリに一致する素材はまだ登録されていません。</p>";
+        container.innerHTML = `
+            <div style='grid-column: 1 / -1; text-align: center; padding: 50px 20px; color: var(--text-secondary); background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed var(--border-color);'>
+                <p style='font-size: 1.1rem; margin-bottom: 10px; color: var(--text-primary);'>📂 このカテゴリにはまだ素材が登録されていません。</p>
+                <p style='font-size: 0.9rem; margin-bottom: 20px;'>他のカテゴリをご覧いただくか、トップページからすべての素材一覧をご確認ください。</p>
+                <a href='index.html' class='action-btn' style='text-decoration:none; padding: 10px 20px; display:inline-block;'>トップページへ戻る</a>
+            </div>
+        `;
         return;
     }
 
@@ -385,6 +425,23 @@ function renderCategoryList(materials, container) {
         const card = createCardElement(item, proxiedUrl, downloadPageUrl, isFav, durationDisplay, "material-card");
         container.appendChild(card);
     });
+}
+
+function renderLoadingSkeleton(msg) {
+    return `<div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-secondary);">⏳ ${escapeHTML(msg)}</div>`;
+}
+
+function renderGlobalError(msg) {
+    const container = document.getElementById('auto-scroll-container') || document.getElementById('list-container');
+    if (container) {
+        container.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: rgba(239,68,68,0.1); border: 1px solid #ef4444; border-radius: 12px; color: #f87171;">
+                <p style="font-size: 1.1rem; font-weight: bold; margin-bottom: 10px;">⚠️ エラーが発生しました</p>
+                <p style="font-size: 0.9rem; margin-bottom: 15px; color: var(--text-primary);">${escapeHTML(msg)}</p>
+                <button onclick="window.location.reload()" class="action-btn" style="background:#ef4444; color:#fff; border:none; padding:8px 20px; cursor:pointer;">ページを再読み込みする</button>
+            </div>
+        `;
+    }
 }
 
 function initFavoriteBackupTools() {
@@ -431,12 +488,13 @@ function playAudio(item) {
 
     bar.style.display = "flex";
     titleEl.textContent = item.title;
-    catEl.textContent = `${item.channel} / ${item.category}`;
+    catEl.textContent = `${item.channel} / ${item.category} (読み込み中...)`;
 
     const downloadPageUrl = `download.html?title=${encodeURIComponent(item.title)}&channel=${encodeURIComponent(item.channel)}&type=${encodeURIComponent(item.type || 'bgm')}&url=${encodeURIComponent(item.fileUrl)}&tags=${encodeURIComponent((item.tags || []).join(" "))}&category=${encodeURIComponent(item.category)}`;
     if (dlBtn) dlBtn.href = downloadPageUrl;
 
     if (currentPlayingUrl !== item.fileUrl) {
+        audio.pause();
         currentPlayingUrl = item.fileUrl;
         audio.src = item.fileUrl;
         audio.load();
@@ -444,7 +502,12 @@ function playAudio(item) {
 
     audio.play().then(() => {
         if (playBtn) playBtn.textContent = "⏸";
-    }).catch(e => console.log("自動再生ブロック:", e));
+        catEl.textContent = `${item.channel} / ${item.category} (再生中)`;
+    }).catch(e => {
+        console.warn("自動再生ブロック:", e);
+        catEl.textContent = `${item.channel} / ${item.category} (再生待機中)`;
+        if (playBtn) playBtn.textContent = "▶";
+    });
 }
 
 function initCustomAudioPlayer() {
@@ -465,31 +528,27 @@ function initCustomAudioPlayer() {
 
     playBtn.addEventListener("click", () => {
         if (audio.paused) {
-            audio.play();
-            playBtn.textContent = "⏸";
+            audio.play().then(() => {
+                playBtn.textContent = "⏸";
+            }).catch(err => console.log("再生エラー:", err));
         } else {
             audio.pause();
             playBtn.textContent = "▶";
         }
     });
 
-    if (back30Btn) back30Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.max(0, audio.currentTime - 30); });
-    if (back10Btn) back10Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.max(0, audio.duration - 10); });
-    if (forward10Btn) forward10Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.min(audio.duration, audio.currentTime + 10); });
-    if (forward30Btn) forward30Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.min(audio.duration, audio.currentTime + 30); });
+    if (back30Btn) back30Btn.addEventListener("click", () => { if (audio.duration && !isNaN(audio.duration)) audio.currentTime = Math.max(0, audio.currentTime - 30); });
+    if (back10Btn) back10Btn.addEventListener("click", () => { if (audio.duration && !isNaN(audio.duration)) audio.currentTime = Math.max(0, audio.currentTime - 10); });
+    if (forward10Btn) forward10Btn.addEventListener("click", () => { if (audio.duration && !isNaN(audio.duration)) audio.currentTime = Math.min(audio.duration, audio.currentTime + 10); });
+    if (forward30Btn) forward30Btn.addEventListener("click", () => { if (audio.duration && !isNaN(audio.duration)) audio.currentTime = Math.min(audio.duration, audio.currentTime + 30); });
 
     let isLooping = false;
     if (loopBtn) {
         loopBtn.addEventListener("click", () => {
             isLooping = !isLooping;
             audio.loop = isLooping;
-            if (isLooping) {
-                loopBtn.classList.add("active-loop");
-                loopBtn.title = "ループ再生：ON";
-            } else {
-                loopBtn.classList.remove("active-loop");
-                loopBtn.title = "ループ再生：OFF";
-            }
+            loopBtn.classList.toggle("active-loop", isLooping);
+            loopBtn.title = isLooping ? "ループ再生：ON" : "ループ再生：OFF";
         });
     }
 
@@ -500,22 +559,32 @@ function initCustomAudioPlayer() {
     }
 
     function formatTime(seconds) {
-        if (isNaN(seconds)) return "0:00";
+        if (isNaN(seconds) || seconds === Infinity) return "0:00";
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
         return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
     }
 
     audio.addEventListener("loadedmetadata", () => {
-        totalTimeEl.textContent = formatTime(audio.duration);
+        if (audio.duration && !isNaN(audio.duration) && audio.duration !== Infinity) {
+            totalTimeEl.textContent = formatTime(audio.duration);
+        } else {
+            totalTimeEl.textContent = "0:00";
+        }
     });
 
     audio.addEventListener("timeupdate", () => {
-        if (audio.duration && !isNaN(audio.duration)) {
+        if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
             const percent = (audio.currentTime / audio.duration) * 100;
             progressFilled.style.width = `${percent}%`;
             currentTimeEl.textContent = formatTime(audio.currentTime);
         }
+    });
+
+    audio.addEventListener("error", () => {
+        const catEl = document.getElementById("sticky-category");
+        if (catEl) catEl.textContent = "音声ファイルの読み込みに失敗しました";
+        playBtn.textContent = "▶";
     });
 
     audio.addEventListener("ended", () => {
@@ -526,16 +595,19 @@ function initCustomAudioPlayer() {
         }
     });
 
-    progressBar.addEventListener("click", (e) => {
+    const handleSeek = (e) => {
         const rect = progressBar.getBoundingClientRect();
-        const clickX = e.clientX - rect.left;
+        const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        const clickX = clientX - rect.left;
         const width = rect.width;
         
         if (audio.duration && !isNaN(audio.duration) && width > 0) {
             const clickRatio = Math.max(0, Math.min(1, clickX / width));
             audio.currentTime = clickRatio * audio.duration;
         }
-    });
+    };
+
+    progressBar.addEventListener("click", handleSeek);
 }
 
 function escapeHTML(str) {
