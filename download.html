@@ -4,180 +4,224 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>素材ダウンロード | AI Material Archive</title>
+    <meta name="description" content="AI Material Archiveの素材詳細・ダウンロードページ。">
+    
+    <!-- CDN事前接続で爆速化 -->
+    <link rel="preconnect" href="https://cdn.discordapp.com">
+    <link rel="preconnect" href="https://media.discordapp.net">
+    <link rel="preconnect" href="https://material-proxy.tutchimikadoseimei.workers.dev">
+
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header>
         <div class="logo"><a href="index.html">AI Material Archive</a></div>
         <nav>
-            <a href="index.html">ホームに戻る</a>
+            <a href="index.html">ホーム</a>
             <a href="terms.html">利用規約</a>
         </nav>
     </header>
 
-    <div class="container" style="max-width: 800px; text-align: center;">
-        <div class="hero-section" style="padding: 40px 20px;">
-            <span id="item-channel" class="card-header-tag" style="display:inline-block; margin-bottom:10px;">🎵 BGM</span>
-            <h2 id="item-title" class="hero-title" style="font-size: 1.8rem; margin-bottom: 10px;">素材を読み込み中...</h2>
-            <p id="item-tags" class="hero-subtitle" style="margin-bottom: 25px;">-</p>
-
-            <!-- プレビュー表示エリア（安全なDOM生成） -->
-            <div id="item-preview" style="margin: 30px 0; display: flex; justify-content: center;">
-                <!-- 動的プレビュー -->
+    <div class="container" style="max-width: 900px; padding: 40px 20px;">
+        <div class="hero-section" style="text-align: left; padding: 30px; position: relative; overflow: hidden;">
+            
+            <div id="material-preview-area" style="margin-bottom: 25px; text-align: center;">
+                <!-- 画像または音声のプレビューがここに動的表示されます -->
             </div>
 
-            <!-- ダウンロードボタン -->
-            <div style="margin-top: 30px;">
-                <button id="download-btn" class="action-btn" style="font-size: 1.1rem; padding: 14px 32px; display: inline-block; cursor: pointer; border: none;">
-                    📥 ダウンロード 📥
-                </button>
+            <span id="detail-tag" class="card-header-tag" style="display:inline-block; margin-bottom: 10px;">🏷️ カテゴリ</span>
+            <h1 id="detail-title" style="font-size: 1.8rem; margin-bottom: 15px; color: var(--text-primary);">タイトル読み込み中...</h1>
+            <p id="detail-tags" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;"></p>
+
+            <div style="background: rgba(255,255,255,0.03); padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px solid rgba(255,255,255,0.08);">
+                <h3 style="font-size: 1rem; color: var(--accent-color); margin-bottom: 10px;">📋 クレジット表記例 (任意)</h3>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="text" id="credit-text" readonly style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 6px; font-size: 0.85rem;" value="BGM：AI Material Archive">
+                    <button onclick="copyCredit()" class="action-btn" style="white-space: nowrap; padding: 10px 16px; cursor: pointer;">コピー</button>
+                </div>
             </div>
 
-            <!-- 🤝 エンゲージメント機能エリア -->
-            <div style="margin-top: 40px; display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; border-top: 1px solid var(--border-color); padding-top: 30px;">
-                <button id="copy-credit-btn" class="action-btn" style="background: #334155; color: #38bdf8; border: 1px solid #475569;">
-                    📋 クレジット表記をコピー
-                </button>
-                <button id="share-twitter-btn" class="action-btn" style="background: #0f172a; color: #f8fafc; border: 1px solid #334155;">
-                    𝕏 でこの素材をシェア
-                </button>
+            <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                <a id="actual-download-btn" href="#" class="action-btn" style="padding: 12px 30px; text-decoration: none; font-weight: bold; background: var(--accent-color); color: #0f172a;" download>💾 素材をダウンロード</a>
+                <a href="index.html" class="action-btn" style="padding: 12px 20px; text-decoration: none; background: #334155; color: #f8fafc;">ホームに戻る</a>
             </div>
         </div>
     </div>
 
-    <!-- 📋 コピー通知用トースト -->
-    <div id="toast" class="toast-notification">クリップボードにコピーしました！</div>
+    <!-- 🎵 復活したスティッキープレイヤーバー（ダウンロードページでの試聴用） -->
+    <div id="sticky-player-bar" class="sticky-player-bar" style="display: flex;">
+        <div class="player-info">
+            <span id="sticky-title" class="player-title">プレイヤー準備完了</span>
+            <span id="sticky-category" class="player-category">試聴プレビュー</span>
+        </div>
+        
+        <div class="player-controls-group">
+            <button id="back-30-btn" class="wmp-btn" title="30秒戻し">&lt;&lt;</button>
+            <button id="back-10-btn" class="wmp-btn" title="10秒戻し">&lt;</button>
+            <button id="play-pause-btn" class="wmp-btn main-play" title="再生/一時停止">▶</button>
+            <button id="forward-10-btn" class="wmp-btn" title="10秒送り">&gt;</button>
+            <button id="forward-30-btn" class="wmp-btn" title="30秒送り">&gt;&gt;</button>
+            <button id="loop-btn" class="wmp-btn" title="ループ再生切り替え">🔁</button>
+
+            <div class="progress-container">
+                <span id="current-time" class="time-display">0:00</span>
+                <div id="progress-bar" class="progress-bar">
+                    <div id="progress-filled" class="progress-filled"></div>
+                </div>
+                <span id="total-time" class="time-display">0:00</span>
+            </div>
+
+            <div class="volume-container">
+                <span style="font-size:0.8rem;">🔊</span>
+                <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.05" value="1">
+            </div>
+        </div>
+
+        <div class="player-action">
+            <a id="sticky-download-btn" href="#" class="action-btn">ダウンロード</a>
+        </div>
+
+        <audio id="hidden-audio" preload="none"></audio>
+    </div>
 
     <footer>
         <p>&copy; 2026 AI Material Archive. All rights reserved. | <a href="terms.html">利用規約</a></p>
     </footer>
 
     <script>
-        // 🔒 URLパラメータの安全な取得と検証
-        const params = new URLSearchParams(window.location.search);
-        const title = params.get('title') || 'AI素材';
-        const channel = params.get('channel') || 'AI Material Archive';
-        const type = params.get('type') || 'bgm';
-        const rawUrl = params.get('url');
-        const tags = params.get('tags') || '';
+        // ダウンロードページのパラメータ解析・プレビュー・音声バー連動処理
+        const PROXY_WORKER_URL = "https://material-proxy.tutchimikadoseimei.workers.dev/?url=";
 
-        // 🔒 textContentによる完全に安全なテキスト反映（XSS完全防止）
-        document.getElementById('item-title').textContent = title;
-        document.getElementById('item-channel শক্তির').textContent = `${type === 'image' ? '🖼️' : '🎵'} ${channel}`;
-        document.getElementById('item-tags').textContent = tags;
+        document.addEventListener("DOMContentLoaded", () => {
+            const params = new URLSearchParams(window.location.search);
+            const title = params.get('title') || '名称未設定の素材';
+            const channel = params.get('channel') || 'AI Material';
+            const type = params.get('type') || 'bgm';
+            const rawUrl = params.get('url') || '';
+            const tags = params.get('tags') || '';
+            const category = params.get('category') || '';
 
-        const previewBox = document.getElementById('item-preview');
-        const downloadBtn = document.getElementById('download-btn');
-
-        // 🔒 URLスキーム検証（javascript: や data: などの危険なスキームを完全にブロック）
-        function isValidUrl(url) {
-            if (!url) return false;
-            try {
-                const parsed = new URL(url, window.location.origin);
-                return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-            } catch (e) {
-                return false;
+            // URLのプロキシ補正
+            let fileUrl = rawUrl;
+            if (fileUrl && !fileUrl.includes('material-proxy') && fileUrl.includes('discord')) {
+                fileUrl = PROXY_WORKER_URL + encodeURIComponent(fileUrl);
             }
+
+            // 画面要素への反映
+            document.getElementById('detail-title').textContent = title;
+            document.getElementById('detail-tag').textContent = `${type === 'image' ? '🖼️ 背景・イラスト' : '🎵 BGM'} / ${channel}`;
+            document.getElementById('detail-tags').textContent = `タグ: ${tags} | カテゴリ: ${category}`;
+            document.getElementById('actual-download-btn').href = fileUrl;
+            document.getElementById('sticky-download-btn').href = fileUrl;
+            document.getElementById('credit-text').value = `${type === 'image' ? '背景・イラスト' : 'BGM'}：${title} (${channel}) | AI Material Archive`;
+
+            // プレビューエリアの構築（画像ならimg表示、音声なら試聴案内）
+            const previewArea = document.getElementById('material-preview-area');
+            if (type === 'image' && fileUrl) {
+                previewArea.innerHTML = `<img src="${fileUrl}" alt="${title}" style="max-width: 100%; max-height: 400px; border-radius: 8px; object-fit: contain; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">`;
+                // 画像の場合はプレイヤーバーを隠すか、そのまま置いておく
+            } else if (fileUrl) {
+                previewArea.innerHTML = `<p style="color: var(--accent-color); font-size: 0.95rem;">▶ 下部のプレイヤーバーから試聴できます。</p>`;
+                
+                // 音声の場合はプレイヤーにセット
+                const audio = document.getElementById('hidden-audio');
+                const bar = document.getElementById('sticky-player-bar');
+                const titleEl = document.getElementById('sticky-title');
+                const catEl = document.getElementById('sticky-category');
+                
+                bar.style.display = 'flex';
+                titleEl.textContent = title;
+                catEl.textContent = `${channel} / ${category}`;
+                audio.src = fileUrl;
+                audio.load();
+            }
+
+            initCustomAudioPlayer();
+        });
+
+        function copyCredit() {
+            const copyText = document.getElementById("credit-text");
+            copyText.select();
+            copyText.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(copyText.value);
+            alert("クレジット表記例をコピーしました: " + copyText.value);
         }
 
-        let targetFileUrl = isValidUrl(rawUrl) ? rawUrl : '';
+        // プレイヤー操作スクリプト
+        function initCustomAudioPlayer() {
+            const audio = document.getElementById("hidden-audio");
+            const playBtn = document.getElementById("play-pause-btn");
+            const back30Btn = document.getElementById("back-30-btn");
+            const back10Btn = document.getElementById("back-10-btn");
+            const forward10Btn = document.getElementById("forward-10-btn");
+            const forward30Btn = document.getElementById("forward-30-btn");
+            const loopBtn = document.getElementById("loop-btn");
+            const volumeSlider = document.getElementById("volume-slider");
+            const progressBar = document.getElementById("progress-bar");
+            const progressFilled = document.getElementById("progress-filled");
+            const currentTimeEl = document.getElementById("current-time");
+            const totalTimeEl = document.getElementById("total-time");
 
-        if (targetFileUrl) {
-            previewBox.innerHTML = ''; // クリア
+            if (!audio || !playBtn) return;
 
-            // 🔒 innerHTMLを使わず安全なDOM要素生成でプレビューを構築
-            if (type === 'bgm') {
-                const audioEl = document.createElement('audio');
-                audioEl.controls = true;
-                audioEl.src = targetFileUrl;
-                audioEl.style.cssText = 'width: 100%; max-width: 500px;';
-                audioEl.onerror = () => {
-                    previewBox.innerHTML = '';
-                    const errP = document.createElement('p');
-                    errP.style.cssText = 'color: var(--heart-color); font-size: 0.9rem;';
-                    errP.textContent = '⚠️ 音声ファイルの読み込みに失敗しました（リンクの有効期限切れの可能性があります）。';
-                    previewBox.appendChild(errP);
-                };
-                previewBox.appendChild(audioEl);
-            } else {
-                const imgEl = document.createElement('img');
-                imgEl.src = targetFileUrl;
-                imgEl.alt = title;
-                imgEl.style.cssText = 'max-width: 100%; max-height: 400px; border-radius: 8px;';
-                imgEl.onerror = () => {
-                    previewBox.innerHTML = '';
-                    const errP = document.createElement('p');
-                    errP.style.cssText = 'color: var(--heart-color);';
-                    errP.textContent = '⚠️ 画像ファイルの読み込みに失敗しました。';
-                    previewBox.appendChild(errP);
-                };
-                previewBox.appendChild(imgEl);
-            }
-
-            // 📥 確実にダウンロードさせる処理（Blob化）
-            downloadBtn.addEventListener('click', async () => {
-                downloadBtn.textContent = "📥 ダウンロード中...";
-                downloadBtn.style.opacity = "0.7";
-                try {
-                    const response = await fetch(targetFileUrl);
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    const blob = await response.blob();
-                    const blobUrl = window.URL.createObjectURL(blob);
-                    
-                    const a = document.createElement('a');
-                    a.href = blobUrl;
-                    
-                    let ext = type === 'image' ? '.png' : '.mp3';
-                    if (targetFileUrl.includes('.jpg') || targetFileUrl.includes('.jpeg')) ext = '.jpg';
-                    if (targetFileUrl.includes('.webp')) ext = '.webp';
-                    if (targetFileUrl.includes('.wav')) ext = '.wav';
-
-                    // 🔒 ファイル名のサニタイズ（安全なファイル名にする）
-                    const safeTitle = title.replace(/[/\\?%*:|"<>]/g, '_');
-                    a.download = `${safeTitle}${ext}`;
-                    document.body.appendChild(a);
-                    a.click();
-                    
-                    a.remove();
-                    window.URL.revokeObjectURL(blobUrl);
-                } catch (err) {
-                    console.error("ダウンロードに失敗しました。別タブで開きます:", err);
-                    window.open(targetFileUrl, '_blank');
-                } finally {
-                    downloadBtn.textContent = "📥 ダウンロード 📥";
-                    downloadBtn.style.opacity = "1";
+            playBtn.addEventListener("click", () => {
+                if (audio.paused) {
+                    audio.play();
+                    playBtn.textContent = "⏸";
+                } else {
+                    audio.pause();
+                    playBtn.textContent = "▶";
                 }
             });
 
-        } else {
-            document.getElementById('item-title').textContent = "有効なファイルが見つかりませんでした";
-            downloadBtn.style.display = "none";
-        }
+            if (back30Btn) back30Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.max(0, audio.currentTime - 30); });
+            if (back10Btn) back10Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.max(0, audio.currentTime - 10); });
+            if (forward10Btn) forward10Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.min(audio.duration, audio.currentTime + 10); });
+            if (forward30Btn) forward30Btn.addEventListener("click", () => { if (audio.duration) audio.currentTime = Math.min(audio.duration, audio.currentTime + 30); });
 
-        // 📋 クレジットコピー機能
-        document.getElementById('copy-credit-btn').addEventListener('click', () => {
-            const creditType = type === 'image' ? '画像' : 'BGM';
-            const creditText = `${creditType}: ${title} (${channel} / AI Material Archive)`;
-            navigator.clipboard.writeText(creditText).then(() => {
-                showToast("クレジットをコピーしました！");
+            let isLooping = false;
+            if (loopBtn) {
+                loopBtn.addEventListener("click", () => {
+                    isLooping = !isLooping;
+                    audio.loop = isLooping;
+                    loopBtn.classList.toggle("active-loop", isLooping);
+                });
+            }
+
+            if (volumeSlider) {
+                volumeSlider.addEventListener("input", (e) => { audio.volume = e.target.value; });
+            }
+
+            function formatTime(seconds) {
+                if (isNaN(seconds)) return "0:00";
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+            }
+
+            audio.addEventListener("loadedmetadata", () => { totalTimeEl.textContent = formatTime(audio.duration); });
+            audio.addEventListener("timeupdate", () => {
+                if (audio.duration && !isNaN(audio.duration)) {
+                    const percent = (audio.currentTime / audio.duration) * 100;
+                    progressFilled.style.width = `${percent}%`;
+                    currentTimeEl.textContent = formatTime(audio.currentTime);
+                }
             });
-        });
+            audio.addEventListener("ended", () => {
+                if (!audio.loop) {
+                    playBtn.textContent = "▶";
+                    progressFilled.style.width = "0%";
+                    currentTimeEl.textContent = "0:00";
+                }
+            });
 
-        // 𝕏 シェア機能
-        document.getElementById('share-twitter-btn').appendEventListener?.('click', () => {});
-        document.getElementById('share-twitter-btn').addEventListener('click', () => {
-            const shareUrl = window.location.href;
-            const tweetText = encodeURIComponent(`【無料AI素材】「${title}」を見つけました！\n#AI素材 #フリー素材`);
-            window.open(`https://twitter.com/intent/tweet?text=${tweetText}&url=${encodeURIComponent(shareUrl)}`, '_blank');
-        });
-
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.classList.add('show');
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 2500);
+            progressBar.addEventListener("click", (e) => {
+                const rect = progressBar.getBoundingClientRect();
+                const clickRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                if (audio.duration && !isNaN(audio.duration)) {
+                    audio.currentTime = clickRatio * audio.duration;
+                }
+            });
         }
     </script>
 </body>
